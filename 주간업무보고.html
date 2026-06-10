@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주간 업무 보고</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; }
+  body {
+    background: linear-gradient(135deg, #eaf1fb, #f4f8fc);
+    min-height: 100vh;
+    padding: 30px 16px;
+    color: #333;
+  }
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 20px;
+    position: relative;
+  }
+  header h1 {
+    font-size: 2.2rem;
+    color: #003876;
+    margin-bottom: 6px;
+    padding-bottom: 10px;
+    border-bottom: 4px solid #ffc72c;
+    display: inline-block;
+  }
+  header p {
+    color: #888;
+    margin-top: 10px;
+  }
+  .admin-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+  }
+  .admin-toggle-btn {
+    padding: 8px 16px;
+    border: 1px solid #003876;
+    background: #fff;
+    color: #003876;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all .2s;
+  }
+  .admin-toggle-btn:hover {
+    background: #003876;
+    color: #fff;
+  }
+  .admin-toggle-btn.active {
+    background: #ffc72c;
+    border-color: #ffc72c;
+    color: #003876;
+  }
+  .admin-toggle-btn.active:hover {
+    background: #e6b227;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  }
+  .card h2 {
+    margin-bottom: 16px;
+    color: #003876;
+    font-size: 1.3rem;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 8px;
+  }
+  .card h3 {
+    color: #003876;
+    font-size: 1.05rem;
+    margin: 18px 0 10px;
+  }
+
+  /* 새 게시글 작성 */
+  .new-post-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .new-post-row input {
+    flex: 1;
+    min-width: 160px;
+    padding: 10px 14px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+  }
+  .new-post-row button, .primary-btn {
+    padding: 10px 20px;
+    border: none;
+    background: #003876;
+    color: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background .2s;
+  }
+  .new-post-row button:hover, .primary-btn:hover {
+    background: #002a57;
+  }
+  .ghost-btn {
+    padding: 8px 16px;
+    border: 1px solid #003876;
+    background: #fff;
+    color: #003876;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .ghost-btn:hover {
+    background: #eaf2fb;
+  }
+  .small-btn {
+    padding: 4px 10px;
+    border: 1px solid #ccc;
+    background: #fff;
+    color: #666;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+  .small-btn:hover {
+    border-color: #003876;
+    color: #003876;
+  }
+  .small-btn.danger:hover {
+    border-color: #ff4a4a;
+    color: #ff4a4a;
+  }
+
+  /* 게시글 목록 */
+  .board-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 18px;
+    border-bottom: 2px solid #003876;
+    color: #003876;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+  .board-header .col-no { width: 50px; text-align: center; }
+  .board-header .col-title { flex: 1; }
+  .board-header .col-meta { width: 160px; text-align: center; }
+  @media (max-width: 600px) {
+    .board-header .col-no, .board-header .col-meta { display: none; }
+  }
+  #postList {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+  }
+  .post-item {
+    background: #fff;
+    border-bottom: 1px solid #eee;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: background .15s, transform .15s;
+  }
+  .post-item:hover {
+    background: #eaf2fb;
+  }
+  .post-item .post-no {
+    width: 50px;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: 700;
+    color: #b8c8da;
+    font-size: 1rem;
+  }
+  .post-item .post-no.latest {
+    color: #fff;
+    background: #ffc72c;
+    border-radius: 6px;
+    padding: 2px 0;
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+  .post-item .post-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .post-item .post-title {
+    font-weight: 700;
+    color: #1a1a1a;
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .post-item .post-title .badge {
+    flex-shrink: 0;
+    background: #003876;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+  .post-item .post-meta {
+    font-size: 0.82rem;
+    color: #999;
+    margin-top: 4px;
+  }
+  .post-item .post-side {
+    width: 160px;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.82rem;
+    color: #888;
+  }
+  @media (max-width: 600px) {
+    .post-item .post-no, .post-item .post-side { display: none; }
+  }
+  .post-item .post-actions button {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+  .post-item .post-actions button:hover {
+    color: #ff4a4a;
+  }
+  .empty {
+    color: #aaa;
+    font-style: italic;
+    text-align: center;
+    padding: 20px 0;
+  }
+
+  /* 상세 페이지 */
+  .detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .back-btn {
+    background: none;
+    border: none;
+    color: #003876;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .back-btn:hover {
+    text-decoration: underline;
+  }
+  .detail-title {
+    font-size: 1.4rem;
+    color: #333;
+    font-weight: 700;
+  }
+  .detail-date {
+    color: #999;
+    font-size: 0.9rem;
+    margin-top: 4px;
+  }
+
+  /* 입력 공통 */
+  label.field-label {
+    display: block;
+    font-weight: 600;
+    color: #555;
+    font-size: 0.88rem;
+    margin-bottom: 4px;
+    margin-top: 12px;
+  }
+  .text-input, .textarea, select.text-input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    font-family: inherit;
+  }
+  .textarea {
+    min-height: 70px;
+    resize: vertical;
+  }
+  .text-input:focus, .textarea:focus {
+    outline: 2px solid #00387644;
+    border-color: #003876;
+  }
+
+  /* 전체 담당업무 개요 표 */
+  .ov-table, .sub-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+  }
+  .ov-table th, .ov-table td, .sub-table th, .sub-table td {
+    border: 1px solid #e2e8f0;
+    padding: 6px;
+    font-size: 0.88rem;
+    vertical-align: top;
+  }
+  .ov-table th, .sub-table th {
+    background: #f5f9fd;
+    color: #003876;
+  }
+  .ov-table input, .sub-table input, .ov-table select, .sub-table select, .ov-table textarea, .sub-table textarea {
+    width: 100%;
+    border: 1px solid #d8e3f0;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 0.88rem;
+    font-family: inherit;
+    padding: 4px;
+  }
+  .ov-table textarea, .sub-table textarea {
+    min-height: 40px;
+    resize: vertical;
+  }
+  .ov-table input, .sub-table input {
+    min-height: 34px;
+  }
+  .ov-table input:focus, .sub-table input:focus, .ov-table select:focus, .sub-table textarea:focus {
+    outline: 1px solid #003876;
+    border-color: #003876;
+  }
+  .col-del { width: 36px; text-align: center; }
+  .proc-cell {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .proc-cell .proc-no {
+    flex-shrink: 0;
+    padding: 6px 0 0;
+    color: #003876;
+    font-weight: 700;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .proc-cell textarea {
+    flex: 1;
+  }
+
+  /* 보고 항목 편집 카드 */
+  .item-editor {
+    border: 2px solid #d6e4f2;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #fbfdff;
+  }
+  .item-editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .item-editor-header .text-input {
+    font-weight: 700;
+    color: #003876;
+    flex: 1;
+    min-width: 0;
+  }
+  .criteria-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+    margin: 10px 0;
+    font-size: 0.88rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .criteria-grid label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  @media (max-width: 600px) {
+    .criteria-grid { grid-template-columns: 1fr; }
+  }
+  .result-toggle {
+    display: flex;
+    gap: 16px;
+    margin: 8px 0;
+    font-size: 0.9rem;
+  }
+  .result-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .sub-section-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #555;
+    margin: 14px 0 6px;
+  }
+  .bullet-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .bullet-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .bullet-dash {
+    padding-top: 9px;
+    color: #999;
+    font-weight: 700;
+  }
+  .bullet-row .textarea {
+    flex: 1;
+    min-height: 38px;
+  }
+
+  .edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  /* 제출 현황 카드 */
+  .reporter-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .reporter-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #f5f9fd;
+    cursor: pointer;
+  }
+  .reporter-card-head .name {
+    font-weight: 700;
+    color: #003876;
+  }
+  .reporter-card-head .count {
+    font-size: 0.82rem;
+    color: #999;
+    margin-left: 8px;
+  }
+  .reporter-card-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .reporter-card-body {
+    padding: 16px;
+    display: none;
+    font-size: 0.9rem;
+  }
+  .reporter-card-body.open {
+    display: block;
+  }
+  .reporter-card-body h4 {
+    color: #003876;
+    margin: 12px 0 6px;
+    font-size: 0.95rem;
+  }
+  .reporter-card-body .item-block {
+    border-top: 1px dashed #ddd;
+    padding-top: 10px;
+    margin-top: 10px;
+  }
+  .reporter-card-body p {
+    white-space: pre-wrap;
+    margin: 4px 0;
+    line-height: 1.5;
+  }
+  .reporter-card-body .label-line {
+    color: #888;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-top: 6px;
+  }
+
+  .save-status {
+    text-align: center;
+    color: #aaa;
+    font-size: 0.85rem;
+    margin-top: 14px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>📋 주간 업무 보고</h1>
+    <p>주별로 게시글을 만들고, 담당자별 업무를 입력해 취합하세요</p>
+  </header>
+
+  <div class="admin-bar">
+    <button class="admin-toggle-btn" id="adminToggleBtn" onclick="toggleAdmin()">🔒 관리자 로그인</button>
+  </div>
+
+  <!-- 목록 화면 -->
+  <div id="listView">
+    <div class="card">
+      <h2>📂 주간보고 목록</h2>
+      <div class="board-header">
+        <span class="col-no">번호</span>
+        <span class="col-title">제목</span>
+        <span class="col-meta">작성일 / 담당자</span>
+      </div>
+      <ul id="postList"></ul>
+    </div>
+
+    <div class="card" id="adminPanel" style="display:none;">
+      <h2>📝 새 주간보고 작성 (관리자)</h2>
+      <div class="new-post-row">
+        <input type="text" id="newPostTitle" placeholder="예: 2026년 6월 2주차 업무보고" />
+        <input type="date" id="newPostDate" />
+        <button onclick="addPost()">생성</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 상세 화면 -->
+  <div id="detailView" style="display:none;">
+    <div class="card">
+      <div class="detail-header">
+        <button class="back-btn" onclick="showList()">← 목록으로</button>
+        <button class="ghost-btn" onclick="exportPost()">🖨️ 인쇄/출력용으로 보기</button>
+      </div>
+      <div class="detail-title" id="detailTitle"></div>
+      <div class="detail-date" id="detailDate"></div>
+    </div>
+
+    <!-- 작성/수정 폼 -->
+    <div class="card">
+      <h2>✏️ 내 업무 보고 작성</h2>
+      <div class="new-post-row" style="margin-bottom:10px;">
+        <select id="loadReporterSelect" class="text-input" style="flex:1;" onchange="onLoadReporterChange()"></select>
+        <button class="ghost-btn" onclick="startNewReport()">+ 새 보고 작성</button>
+      </div>
+      <div id="editArea"></div>
+    </div>
+
+    <!-- 제출 현황 -->
+    <div class="card">
+      <h2 id="reportersHeading">📑 제출 현황</h2>
+      <div id="reportersContainer"></div>
+      <p class="save-status">입력 내용은 자동으로 저장됩니다 ✅</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ====== Firebase 설정 (아래 값을 본인 Firebase 프로젝트 설정값으로 교체하세요) ======
+const firebaseConfig = {
+  apiKey: "AIzaSyBvHDkiWfgIM2TqLfcW1Di1IqxRocSTVKY",
+  authDomain: "haksan-1035e.firebaseapp.com",
+  projectId: "haksan-1035e",
+  storageBucket: "haksan-1035e.firebasestorage.app",
+  messagingSenderId: "360002829552",
+  appId: "1:360002829552:web:0bcb4ceff18268b0d75635"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const docRef = db.collection('weeklyReports').doc('main');
+// ===============================================================================
+
+const ADMIN_PASSWORD = 'inu1234';
+const STATUS_OPTIONS = ['완료','진행중','진행예정','보류'];
+const COOP_STATUS_OPTIONS = ['진행예정','진행중','진행완료'];
+
+let dataReady = false;
+
+function saveData() {
+  docRef.set(data).catch(err => {
+    alert('저장 중 오류가 발생했습니다: ' + err.message);
+  });
+}
+
+// 실시간 동기화: 다른 사용자의 변경 사항이 자동으로 반영됩니다.
+docRef.onSnapshot((snap) => {
+  if (snap.exists) {
+    data = snap.data();
+    if (!data.posts) data.posts = [];
+  } else {
+    data = { posts: [] };
+    docRef.set(data);
+  }
+  const wasReady = dataReady;
+  dataReady = true;
+
+  if (!wasReady) {
+    // 최초 로딩 완료
+    renderPostList();
+  } else if (currentPostId && document.getElementById('detailView').style.display !== 'none') {
+    // 상세 화면을 보고 있는 중 원격 변경 발생 -> 제출 현황만 갱신 (편집중인 draft는 유지)
+    const post = getCurrentPost();
+    if (!post) { showList(); return; }
+    renderReporterSelect();
+    renderReporters();
+    renderPostList();
+  } else {
+    renderPostList();
+  }
+}, (err) => {
+  alert('데이터 연결 오류: ' + err.message + '\n\nfirebaseConfig 설정을 확인해주세요.');
+});
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : str;
+  return div.innerHTML;
+}
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+let data = { posts: [] };
+let currentPostId = null;
+let isAdmin = sessionStorage.getItem('weekly_report_admin') === 'true';
+let draft = null; // 현재 편집 중인 reporter
+
+// ---------- 관리자 ----------
+function toggleAdmin() {
+  if (isAdmin) {
+    isAdmin = false;
+    sessionStorage.removeItem('weekly_report_admin');
+  } else {
+    const pw = prompt('관리자 비밀번호를 입력하세요');
+    if (pw === null) return;
+    if (pw !== ADMIN_PASSWORD) {
+      alert('비밀번호가 올바르지 않습니다.');
+      return;
+    }
+    isAdmin = true;
+    sessionStorage.setItem('weekly_report_admin', 'true');
+  }
+  applyAdminUI();
+  renderPostList();
+  if (currentPostId) renderReporters();
+}
+function applyAdminUI() {
+  const btn = document.getElementById('adminToggleBtn');
+  const panel = document.getElementById('adminPanel');
+  if (isAdmin) {
+    btn.textContent = '🔓 관리자 로그아웃';
+    btn.classList.add('active');
+    panel.style.display = 'block';
+  } else {
+    btn.textContent = '🔒 관리자 로그인';
+    btn.classList.remove('active');
+    panel.style.display = 'none';
+  }
+}
+
+// ---------- 목록 화면 ----------
+function renderPostList() {
+  const list = document.getElementById('postList');
+  list.innerHTML = '';
+  if (data.posts.length === 0) {
+    list.innerHTML = '<li class="empty">아직 작성된 주간보고가 없습니다.</li>';
+    return;
+  }
+  const sorted = [...data.posts].sort((a, b) => b.createdAt - a.createdAt);
+  sorted.forEach((post, idx) => {
+    const li = document.createElement('li');
+    li.className = 'post-item';
+    const date = new Date(post.createdAt);
+    const dateStr = `${date.getFullYear()}.${String(date.getMonth()+1).padStart(2,'0')}.${String(date.getDate()).padStart(2,'0')}`;
+    const num = sorted.length - idx;
+    const noHtml = idx === 0
+      ? '<span class="post-no latest">NEW</span>'
+      : `<span class="post-no">${num}</span>`;
+    const reporterCount = (post.reporters || []).length;
+    li.innerHTML = `
+      ${noHtml}
+      <div class="post-main">
+        <div class="post-title"><span class="badge">주간보고</span>${escapeHtml(post.title)}</div>
+        <div class="post-meta">작성일 ${dateStr} · 담당자 ${reporterCount}명</div>
+      </div>
+      <div class="post-side">${dateStr}<br>담당자 ${reporterCount}명</div>
+      <div class="post-actions">
+        ${isAdmin ? `<button title="삭제" data-id="${post.id}" class="delete-post">✕</button>` : ''}
+      </div>
+    `;
+    li.addEventListener('click', (e) => {
+      if (e.target.classList.contains('delete-post')) return;
+      openPost(post.id);
+    });
+    const delBtn = li.querySelector('.delete-post');
+    if (delBtn) {
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm('이 주간보고를 삭제하시겠습니까?')) deletePost(post.id);
+      });
+    }
+    list.appendChild(li);
+  });
+}
+function addPost() {
+  const titleInput = document.getElementById('newPostTitle');
+  const dateInput = document.getElementById('newPostDate');
+  const title = titleInput.value.trim();
+  if (!title) return;
+  const post = {
+    id: uid(),
+    title,
+    reportDate: dateInput.value || '',
+    createdAt: Date.now(),
+    reporters: []
+  };
+  data.posts.push(post);
+  saveData();
+  titleInput.value = '';
+  dateInput.value = '';
+  renderPostList();
+}
+function deletePost(id) {
+  data.posts = data.posts.filter(p => p.id !== id);
+  saveData();
+  renderPostList();
+}
+
+// ---------- 상세 화면 ----------
+function getCurrentPost() {
+  return data.posts.find(p => p.id === currentPostId);
+}
+function openPost(id) {
+  currentPostId = id;
+  const post = getCurrentPost();
+  if (!post) return;
+  if (!post.reporters) post.reporters = [];
+  post.reporters.forEach(normalizeReporter);
+  saveData();
+  document.getElementById('detailTitle').textContent = post.title;
+  document.getElementById('detailDate').textContent = post.reportDate ? `보고 기준일: ${post.reportDate}` : '';
+  draft = null;
+  startNewReport();
+  renderReporters();
+  document.getElementById('listView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'block';
+}
+function showList() {
+  currentPostId = null;
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('listView').style.display = 'block';
+  renderPostList();
+}
+
+// ---------- 새 항목 헬퍼 ----------
+function newOverviewRow() {
+  return { no: '', name: '', processes: [{ text: '', status: '완료' }] };
+}
+function newItem() {
+  return {
+    id: uid(),
+    title: '',
+    criteria: { progress: false, completed: false, share: false, coop: false },
+    lastWeekBullets: [''],
+    resultHas: 'no',
+    resultBullets: [''],
+    plans: [{ bullets: [''], deadline: '' }],
+    coops: [],
+    decisions: []
+  };
+}
+
+// ---------- 옛 데이터(단일 텍스트) -> 항목 목록 형태로 변환 ----------
+function procLabel(overviewIdx, procIdx) {
+  return `[${overviewIdx + 1}-${procIdx + 1}]`;
+}
+function bulletsToText(bullets) {
+  return (bullets || []).filter(b => b && b.trim()).map(b => '- ' + b).join('\n');
+}
+function splitToBullets(text) {
+  if (!text) return [''];
+  const lines = String(text).split('\n').map(s => s.replace(/^[-·]\s*/, '').trim()).filter(Boolean);
+  return lines.length ? lines : [''];
+}
+function normalizeReporter(r) {
+  (r.overview || []).forEach(o => {
+    if (!o.processes) o.processes = [{ text: o.process || '', status: o.status || '완료' }];
+  });
+  (r.items || []).forEach(item => {
+    if (!item.lastWeekBullets) item.lastWeekBullets = splitToBullets(item.lastWeekContent);
+    if (!item.resultBullets) item.resultBullets = splitToBullets(item.resultContent);
+    (item.plans || []).forEach(p => {
+      if (!p.bullets) p.bullets = splitToBullets(p.content);
+    });
+  });
+}
+
+// ---------- 보고자 선택 드롭다운 ----------
+function renderReporterSelect() {
+  const sel = document.getElementById('loadReporterSelect');
+  const post = getCurrentPost();
+  sel.innerHTML = '<option value="">-- 기존 보고 불러와 수정 --</option>' +
+    (post.reporters || []).map(r => `<option value="${r.id}">${escapeHtml(r.name || '(이름없음)')}</option>`).join('');
+  if (draft && draft._loadedFrom) sel.value = draft._loadedFrom;
+}
+function onLoadReporterChange() {
+  const sel = document.getElementById('loadReporterSelect');
+  const id = sel.value;
+  if (!id) { startNewReport(); return; }
+  const post = getCurrentPost();
+  const r = post.reporters.find(x => x.id === id);
+  if (!r) return;
+  draft = JSON.parse(JSON.stringify(r));
+  draft._loadedFrom = id;
+  renderEditForm();
+}
+function startNewReport() {
+  draft = { id: uid(), name: '', overview: [newOverviewRow()], items: [newItem()] };
+  renderReporterSelect();
+  renderEditForm();
+}
+
+// ---------- 편집 폼 렌더링 ----------
+function renderEditForm() {
+  const area = document.getElementById('editArea');
+  let html = '';
+  html += `<label class="field-label">보고자 이름</label>
+    <input type="text" class="text-input" id="reporterNameInput" placeholder="예: 김아람" value="${escapeHtml(draft.name)}">`;
+
+  html += `<h3>1. 전체 담당업무 개요</h3>
+    <table class="ov-table">
+      <thead><tr><th style="width:40px;">No</th><th style="width:140px;">업무명</th><th>업무 프로세스 / 주요내용</th><th style="width:90px;">진행여부</th><th class="col-del"></th></tr></thead>
+      <tbody>`;
+  draft.overview.forEach((row, i) => {
+    const rowspan = row.processes.length;
+    html += `<tr>
+      <td rowspan="${rowspan}" style="text-align:center;">${i + 1}</td>
+      <td rowspan="${rowspan}"><textarea data-ov="${i}" data-f="name">${escapeHtml(row.name)}</textarea></td>`;
+    row.processes.forEach((proc, j) => {
+      if (j > 0) html += `<tr>`;
+      html += `
+      <td>
+        <div class="proc-cell">
+          <span class="proc-no">${procLabel(i, j)}</span>
+          <textarea data-ov="${i}" data-proc="${j}" data-pf="text" placeholder="예: 담당자별 자료 요청 및 취합">${escapeHtml(proc.text)}</textarea>
+        </div>
+      </td>
+      <td><select data-ov="${i}" data-proc="${j}" data-pf="status">
+        ${STATUS_OPTIONS.map(s => `<option ${s===proc.status?'selected':''}>${s}</option>`).join('')}
+      </select></td>
+      <td class="col-del">
+        <button class="small-btn" data-action="add-process" data-ov="${i}" title="프로세스 행 추가">+</button>
+        ${rowspan > 1 ? `<button class="small-btn danger" data-action="del-process" data-ov="${i}" data-idx="${j}" title="이 행 삭제">✕</button>` : ''}
+      </td>
+    </tr>`;
+    });
+    html += `<tr><td colspan="4" style="text-align:right; border-top:none; padding:2px 6px;">
+      <button class="small-btn danger" data-action="del-overview" data-idx="${i}">✕ 업무 전체 삭제</button>
+    </td></tr>`;
+  });
+  html += `</tbody></table>
+    <button class="small-btn" data-action="add-overview">+ 업무 추가</button>`;
+
+  html += `<h3>2. 주간보고 대상 업무</h3>`;
+  draft.items.forEach((item, i) => {
+    html += renderItemEditor(item, i);
+  });
+  html += `<button class="ghost-btn" data-action="add-item">+ 보고 항목 추가</button>`;
+
+  html += `<div class="edit-actions">
+      <button class="primary-btn" data-action="save-draft">💾 저장</button>
+    </div>`;
+
+  area.innerHTML = html;
+}
+
+function renderBulletEditor(bullets, itemIdx, field, planIdx) {
+  const planAttr = planIdx !== undefined ? ` data-plan="${planIdx}"` : '';
+  let html = '<div class="bullet-editor">';
+  bullets.forEach((b, k) => {
+    html += `<div class="bullet-row">
+      <span class="bullet-dash">-</span>
+      <textarea class="textarea" data-item="${itemIdx}"${planAttr} data-bf="${field}" data-bidx="${k}" placeholder="내용을 입력하세요">${escapeHtml(b)}</textarea>
+      ${bullets.length > 1 ? `<button class="small-btn danger" data-action="del-bullet" data-item="${itemIdx}"${planAttr} data-bf="${field}" data-idx="${k}">✕</button>` : ''}
+    </div>`;
+  });
+  html += `<button class="small-btn" data-action="add-bullet" data-item="${itemIdx}"${planAttr} data-bf="${field}">+ 항목 추가</button></div>`;
+  return html;
+}
+function getBulletArray(ds) {
+  const item = draft.items[+ds.item];
+  const target = ds.plan !== undefined ? item.plans[+ds.plan] : item;
+  return target[ds.bf];
+}
+
+function refreshTitleSelects() {
+  document.querySelectorAll('select[data-f="titleSelect"]').forEach(sel => {
+    const item = draft.items[+sel.dataset.item];
+    sel.innerHTML = buildTitleSelectOptions(item && item.title);
+  });
+}
+
+function buildTitleSelectOptions(currentTitle) {
+  const labels = [];
+  draft.overview.forEach((row, oi) => {
+    (row.processes || []).forEach((proc, j) => {
+      if (!row.name && !proc.text) return;
+      labels.push(`${procLabel(oi, j)} ${row.name}${proc.text ? ' - ' + proc.text : ''}`);
+    });
+  });
+  let html = `<option value="">-- 개요에서 선택 --</option>`;
+  if (currentTitle && !labels.includes(currentTitle)) {
+    html += `<option value="${escapeHtml(currentTitle)}" selected>${escapeHtml(currentTitle)}</option>`;
+  }
+  labels.forEach(label => {
+    html += `<option value="${escapeHtml(label)}" ${label === currentTitle ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+  });
+  return html;
+}
+
+function renderItemEditor(item, i) {
+  let html = `<div class="item-editor" data-item-block="${i}">
+    <div class="item-editor-header">
+      <select class="text-input" data-item="${i}" data-f="titleSelect">
+        ${buildTitleSelectOptions(item.title)}
+      </select>
+      <button class="small-btn danger" data-action="del-item" data-idx="${i}">✕ 항목 삭제</button>
+    </div>
+
+    <div class="criteria-grid">
+      <label><input type="checkbox" data-item="${i}" data-crit="progress" ${item.criteria.progress?'checked':''}> 지난 주 주요진행사항 있음</label>
+      <label><input type="checkbox" data-item="${i}" data-crit="completed" ${item.criteria.completed?'checked':''}> 완료·성과 있음</label>
+      <label><input type="checkbox" data-item="${i}" data-crit="share" ${item.criteria.share?'checked':''}> 이번 주 계획 공유 필요</label>
+      <label><input type="checkbox" data-item="${i}" data-crit="coop" ${item.criteria.coop?'checked':''}> 협조 필요</label>
+    </div>
+
+    <label class="field-label">지난 주 완료 내용</label>
+    ${renderBulletEditor(item.lastWeekBullets, i, 'lastWeekBullets')}
+
+    <label class="field-label">지난 주 완료·성과</label>
+    <div class="result-toggle">
+      <label><input type="radio" name="result-${i}" data-item="${i}" data-f="resultHas" value="yes" ${item.resultHas==='yes'?'checked':''}> 있음</label>
+      <label><input type="radio" name="result-${i}" data-item="${i}" data-f="resultHas" value="no" ${item.resultHas==='no'?'checked':''}> 없음</label>
+    </div>
+    ${renderBulletEditor(item.resultBullets, i, 'resultBullets')}
+
+    <div class="sub-section-title">이번 주 계획</div>
+    <table class="sub-table">
+      <thead><tr><th>내용</th><th style="width:90px;">기한</th><th class="col-del"></th></tr></thead>
+      <tbody>`;
+  item.plans.forEach((p, j) => {
+    html += `<tr>
+      <td>${renderBulletEditor(p.bullets, i, 'bullets', j)}</td>
+      <td style="vertical-align:middle;"><input type="text" data-item="${i}" data-plan="${j}" data-pf="deadline" value="${escapeHtml(p.deadline)}" placeholder="~6.12."></td>
+      <td class="col-del" style="vertical-align:middle;"><button class="small-btn danger" data-action="del-plan" data-item="${i}" data-idx="${j}">✕</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table>
+    <button class="small-btn" data-action="add-plan" data-item="${i}">+ 계획 추가</button>
+
+    <div class="sub-section-title">협조 요청 사항 (필요 시)</div>
+    <table class="sub-table">
+      <thead><tr><th style="width:120px;">협조 부서</th><th>요청 내용</th><th style="width:90px;">진행상황</th><th class="col-del"></th></tr></thead>
+      <tbody>`;
+  item.coops.forEach((c, j) => {
+    html += `<tr>
+      <td><input type="text" data-item="${i}" data-coop="${j}" data-cf="dept" value="${escapeHtml(c.dept)}"></td>
+      <td><textarea data-item="${i}" data-coop="${j}" data-cf="content">${escapeHtml(c.content)}</textarea></td>
+      <td><select data-item="${i}" data-coop="${j}" data-cf="status">
+        ${COOP_STATUS_OPTIONS.map(s => `<option ${s===c.status?'selected':''}>${s}</option>`).join('')}
+      </select></td>
+      <td class="col-del"><button class="small-btn danger" data-action="del-coop" data-item="${i}" data-idx="${j}">✕</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table>
+    <button class="small-btn" data-action="add-coop" data-item="${i}">+ 협조 요청 추가</button>
+
+    <div class="sub-section-title">관장 확인·결정 필요 사항 (필요 시)</div>
+    <table class="sub-table">
+      <thead><tr><th>확인·결정 요청 내용</th><th class="col-del"></th></tr></thead>
+      <tbody>`;
+  item.decisions.forEach((d, j) => {
+    html += `<tr>
+      <td><textarea data-item="${i}" data-dec="${j}">${escapeHtml(d.content)}</textarea></td>
+      <td class="col-del"><button class="small-btn danger" data-action="del-decision" data-item="${i}" data-idx="${j}">✕</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table>
+    <button class="small-btn" data-action="add-decision" data-item="${i}">+ 확인사항 추가</button>
+  </div>`;
+  return html;
+}
+
+// ---------- 입력값 -> draft 반영 (input/change) ----------
+document.getElementById('editArea').addEventListener('input', handleEditInput);
+document.getElementById('editArea').addEventListener('change', handleEditInput);
+function handleEditInput(e) {
+  const t = e.target;
+  if (t.id === 'reporterNameInput') { draft.name = t.value; return; }
+  if (t.dataset.ov !== undefined) {
+    const ov = draft.overview[+t.dataset.ov];
+    if (t.dataset.proc !== undefined) {
+      const proc = ov.processes[+t.dataset.proc];
+      proc[t.dataset.pf] = t.value;
+    } else {
+      ov[t.dataset.f] = t.value;
+    }
+    refreshTitleSelects();
+    return;
+  }
+  if (t.dataset.item !== undefined) {
+    const item = draft.items[+t.dataset.item];
+    if (t.dataset.crit !== undefined) {
+      item.criteria[t.dataset.crit] = t.checked;
+    } else if (t.dataset.bf !== undefined) {
+      getBulletArray(t.dataset)[+t.dataset.bidx] = t.value;
+    } else if (t.dataset.plan !== undefined) {
+      item.plans[+t.dataset.plan][t.dataset.pf] = t.value;
+    } else if (t.dataset.coop !== undefined) {
+      item.coops[+t.dataset.coop][t.dataset.cf] = t.value;
+    } else if (t.dataset.dec !== undefined) {
+      item.decisions[+t.dataset.dec].content = t.value;
+    } else if (t.dataset.f === 'titleSelect') {
+      item.title = t.value;
+      return;
+    } else if (t.dataset.f !== undefined) {
+      item[t.dataset.f] = t.value;
+    }
+  }
+}
+
+// ---------- 버튼 클릭 (구조 변경 -> 재렌더) ----------
+document.getElementById('editArea').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'add-overview') draft.overview.push(newOverviewRow());
+  else if (action === 'del-overview') {
+    if (draft.overview.length <= 1) { alert('최소 1개의 업무가 필요합니다.'); return; }
+    draft.overview.splice(+btn.dataset.idx, 1);
+  }
+  else if (action === 'add-process') draft.overview[+btn.dataset.ov].processes.push({ text: '', status: '완료' });
+  else if (action === 'del-process') {
+    const ov = draft.overview[+btn.dataset.ov];
+    if (ov.processes.length <= 1) return;
+    ov.processes.splice(+btn.dataset.idx, 1);
+  }
+  else if (action === 'add-item') draft.items.push(newItem());
+  else if (action === 'del-item') {
+    if (draft.items.length <= 1) { alert('최소 1개의 보고 항목이 필요합니다.'); return; }
+    draft.items.splice(+btn.dataset.idx, 1);
+  }
+  else if (action === 'add-plan') draft.items[+btn.dataset.item].plans.push({ bullets: [''], deadline: '' });
+  else if (action === 'del-plan') draft.items[+btn.dataset.item].plans.splice(+btn.dataset.idx, 1);
+  else if (action === 'add-bullet') getBulletArray(btn.dataset).push('');
+  else if (action === 'del-bullet') {
+    const arr = getBulletArray(btn.dataset);
+    if (arr.length <= 1) return;
+    arr.splice(+btn.dataset.idx, 1);
+  }
+  else if (action === 'add-coop') draft.items[+btn.dataset.item].coops.push({ dept: '', content: '', status: '진행예정' });
+  else if (action === 'del-coop') draft.items[+btn.dataset.item].coops.splice(+btn.dataset.idx, 1);
+  else if (action === 'add-decision') draft.items[+btn.dataset.item].decisions.push({ content: '' });
+  else if (action === 'del-decision') draft.items[+btn.dataset.item].decisions.splice(+btn.dataset.idx, 1);
+  else if (action === 'save-draft') { saveDraft(); return; }
+  else return;
+  renderEditForm();
+});
+
+function saveDraft() {
+  if (!draft.name.trim()) { alert('보고자 이름을 입력해주세요.'); return; }
+  const post = getCurrentPost();
+  const existingIdx = post.reporters.findIndex(r => r.id === draft.id);
+  const toSave = JSON.parse(JSON.stringify(draft));
+  delete toSave._loadedFrom;
+  if (existingIdx >= 0) post.reporters[existingIdx] = toSave;
+  else post.reporters.push(toSave);
+  saveData();
+  draft._loadedFrom = draft.id;
+  renderPostList();
+  renderReporterSelect();
+  renderReporters();
+  alert('저장되었습니다.');
+}
+
+// ---------- 제출 현황 (읽기 전용) ----------
+function renderReporters() {
+  const post = getCurrentPost();
+  const container = document.getElementById('reportersContainer');
+  document.getElementById('reportersHeading').textContent = `📑 제출 현황 (${post.reporters.length}명)`;
+  if (!post.reporters.length) {
+    container.innerHTML = '<p class="empty">아직 제출된 보고가 없습니다.</p>';
+    return;
+  }
+  container.innerHTML = post.reporters.map((r, idx) => {
+    return `<div class="reporter-card">
+      <div class="reporter-card-head" data-toggle="${idx}">
+        <div><span class="name">${escapeHtml(r.name)}</span><span class="count">보고 항목 ${r.items.length}건</span></div>
+        <div class="reporter-card-actions">
+          ${isAdmin ? `<button class="small-btn" data-move-up="${idx}" ${idx === 0 ? 'disabled' : ''}>▲</button>
+          <button class="small-btn" data-move-down="${idx}" ${idx === post.reporters.length - 1 ? 'disabled' : ''}>▼</button>` : ''}
+          <button class="small-btn" data-edit="${r.id}">수정</button>
+          ${isAdmin ? `<button class="small-btn danger" data-del="${r.id}">삭제</button>` : ''}
+        </div>
+      </div>
+      <div class="reporter-card-body" id="reporter-body-${idx}">${renderReporterReadonly(r)}</div>
+    </div>`;
+  }).join('');
+
+  container.querySelectorAll('[data-toggle]').forEach(head => {
+    head.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      const idx = head.dataset.toggle;
+      document.getElementById(`reporter-body-${idx}`).classList.toggle('open');
+    });
+  });
+  container.querySelectorAll('[data-move-up]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = +b.dataset.moveUp;
+      const post = getCurrentPost();
+      [post.reporters[idx - 1], post.reporters[idx]] = [post.reporters[idx], post.reporters[idx - 1]];
+      saveData();
+      renderReporters();
+    });
+  });
+  container.querySelectorAll('[data-move-down]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = +b.dataset.moveDown;
+      const post = getCurrentPost();
+      [post.reporters[idx + 1], post.reporters[idx]] = [post.reporters[idx], post.reporters[idx + 1]];
+      saveData();
+      renderReporters();
+    });
+  });
+  container.querySelectorAll('[data-edit]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.getElementById('loadReporterSelect').value = b.dataset.edit;
+      onLoadReporterChange();
+      window.scrollTo({ top: document.getElementById('editArea').getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+    });
+  });
+  container.querySelectorAll('[data-del]').forEach(b => {
+    b.addEventListener('click', () => {
+      if (!confirm('이 보고자의 제출 내용을 삭제하시겠습니까?')) return;
+      const post = getCurrentPost();
+      post.reporters = post.reporters.filter(r => r.id !== b.dataset.del);
+      saveData();
+      if (draft && draft._loadedFrom === b.dataset.del) startNewReport();
+      renderReporterSelect();
+      renderReporters();
+      renderPostList();
+    });
+  });
+}
+
+function renderReporterReadonly(r) {
+  let html = `<h4>1. 전체 담당업무 개요</h4>`;
+  if (r.overview.some(o => o.name || (o.processes || []).some(p => p.text))) {
+    html += `<table class="sub-table"><thead><tr><th style="width:40px;">No</th><th>업무명</th><th>업무 프로세스 / 주요내용</th><th style="width:80px;">진행여부</th></tr></thead><tbody>`;
+    r.overview.forEach((o, oi) => {
+      const procs = o.processes && o.processes.length ? o.processes : [{ text: '', status: '' }];
+      procs.forEach((p, j) => {
+        html += `<tr>`;
+        if (j === 0) {
+          html += `<td rowspan="${procs.length}" style="text-align:center;">${oi + 1}</td><td rowspan="${procs.length}">${escapeHtml(o.name)}</td>`;
+        }
+        html += `<td style="white-space:pre-wrap;">${escapeHtml(procLabel(oi, j))} ${escapeHtml(p.text)}</td><td>${escapeHtml(p.status)}</td></tr>`;
+      });
+    });
+    html += `</tbody></table>`;
+  } else {
+    html += `<p class="empty">입력된 내용 없음</p>`;
+  }
+
+  html += `<h4>2. 주간보고 대상 업무</h4>`;
+  r.items.forEach(item => {
+    html += `<div class="item-block">
+      <p style="font-weight:700;">${escapeHtml(item.title) || '(제목 없음)'}</p>
+      <div class="label-line">보고대상 선정기준</div>
+      <p>${[
+        item.criteria.progress ? '☑ 지난 주 주요진행사항 있음' : '',
+        item.criteria.completed ? '☑ 완료·성과 있음' : '',
+        item.criteria.share ? '☑ 이번 주 계획 공유 필요' : '',
+        item.criteria.coop ? '☑ 협조 필요' : ''
+      ].filter(Boolean).join('  ') || '선택 없음'}</p>
+
+      <div class="label-line">지난 주 완료 내용</div>
+      <p style="white-space:pre-wrap;">${escapeHtml(bulletsToText(item.lastWeekBullets)) || '-'}</p>
+
+      <div class="label-line">지난 주 완료·성과 (${item.resultHas === 'yes' ? '있음' : '없음'})</div>
+      <p style="white-space:pre-wrap;">${escapeHtml(bulletsToText(item.resultBullets)) || '-'}</p>
+
+      <div class="label-line">이번 주 계획</div>`;
+    if (item.plans.some(p => (p.bullets || []).some(b => b && b.trim()) || p.deadline)) {
+      html += `<table class="sub-table"><thead><tr><th>내용</th><th style="width:90px;">기한</th></tr></thead><tbody>`;
+      item.plans.forEach(p => {
+        html += `<tr><td style="white-space:pre-wrap;">${escapeHtml(bulletsToText(p.bullets))}</td><td>${escapeHtml(p.deadline)}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+    } else {
+      html += `<p>-</p>`;
+    }
+    if (item.coops.length) {
+      html += `<div class="label-line">협조 요청 사항</div>
+        <table class="sub-table"><thead><tr><th style="width:120px;">협조 부서</th><th>요청 내용</th><th style="width:80px;">진행상황</th></tr></thead><tbody>`;
+      item.coops.forEach(c => {
+        html += `<tr><td>${escapeHtml(c.dept)}</td><td style="white-space:pre-wrap;">${escapeHtml(c.content)}</td><td>${escapeHtml(c.status)}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+    if (item.decisions.length) {
+      html += `<div class="label-line">관장 확인·결정 필요 사항</div>
+        <table class="sub-table"><thead><tr><th>내용</th></tr></thead><tbody>`;
+      item.decisions.forEach(d => {
+        html += `<tr><td style="white-space:pre-wrap;">${escapeHtml(d.content)}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+    }
+    html += `</div>`;
+  });
+  return html;
+}
+
+// ---------- 인쇄/출력용 보기 ----------
+function exportPost() {
+  const post = getCurrentPost();
+  if (!post.reporters.length) { alert('아직 제출된 보고가 없습니다.'); return; }
+
+  let body = `<div class="cover">
+    <h1>주간업무보고자료</h1>
+    <p class="cover-date">${escapeHtml(post.reportDate || '')}</p>
+    <p class="cover-title">${escapeHtml(post.title)}</p>
+  </div>`;
+
+  post.reporters.forEach(r => {
+    body += `<div class="page">
+      <p class="reporter-name">보고자: ${escapeHtml(r.name)}</p>
+      <h3>1. 전체 담당업무 개요</h3>`;
+    if (r.overview.some(o => o.name || (o.processes || []).some(p => p.text))) {
+      body += `<table><thead><tr><th style="width:40px;">No</th><th>업무명</th><th>업무 프로세스 / 주요내용</th><th style="width:80px;">진행여부</th></tr></thead><tbody>`;
+      r.overview.forEach((o, oi) => {
+        const procs = o.processes && o.processes.length ? o.processes : [{ text: '', status: '' }];
+        procs.forEach((p, j) => {
+          body += `<tr>`;
+          if (j === 0) {
+            body += `<td style="text-align:center;" rowspan="${procs.length}">${oi + 1}</td><td rowspan="${procs.length}">${escapeHtml(o.name)}</td>`;
+          }
+          body += `<td style="white-space:pre-wrap;text-align:left;">${escapeHtml(procLabel(oi, j))} ${escapeHtml(p.text)}</td><td style="text-align:center;">${escapeHtml(p.status)}</td></tr>`;
+        });
+      });
+      body += `</tbody></table>`;
+    }
+    body += `<h3>2. 주간보고 대상 업무</h3>`;
+    r.items.forEach(item => {
+      body += `<p class="item-title">${escapeHtml(item.title)}</p>
+        <table class="kv">
+          <tr><th style="width:120px;">보고대상 선정기준</th><td>${[
+            item.criteria.progress ? '☑' : '☐', '지난 주 주요진행사항 있음&nbsp;&nbsp;&nbsp;',
+            item.criteria.completed ? '☑' : '☐', '완료·성과 있음<br>',
+            item.criteria.share ? '☑' : '☐', '이번 주 계획 공유 필요&nbsp;&nbsp;&nbsp;',
+            item.criteria.coop ? '☑' : '☐', '협조 필요'
+          ].join(' ')}</td></tr>
+          <tr><th>지난 주 완료 내용</th><td style="white-space:pre-wrap;">${escapeHtml(bulletsToText(item.lastWeekBullets))}</td></tr>
+          <tr><th>지난 주 완료·성과<br>(${item.resultHas==='yes'?'있음':'없음'})</th><td style="white-space:pre-wrap;">${escapeHtml(bulletsToText(item.resultBullets))}</td></tr>
+          <tr><th>이번 주 계획</th><td>
+            <table class="inner"><thead><tr><th>내용</th><th style="width:80px;">기한</th></tr></thead><tbody>
+            ${item.plans.map(p => `<tr><td style="white-space:pre-wrap;text-align:left;">${escapeHtml(bulletsToText(p.bullets))}</td><td style="text-align:center;">${escapeHtml(p.deadline)}</td></tr>`).join('')}
+            </tbody></table>
+          </td></tr>`;
+      if (item.coops.length) {
+        body += `<tr><th>협조 요청 사항</th><td>
+          <table class="inner"><thead><tr><th style="width:100px;">협조 부서</th><th>요청 내용</th><th style="width:70px;">진행상황</th></tr></thead><tbody>
+          ${item.coops.map(c => `<tr><td>${escapeHtml(c.dept)}</td><td style="white-space:pre-wrap;text-align:left;">${escapeHtml(c.content)}</td><td>${escapeHtml(c.status)}</td></tr>`).join('')}
+          </tbody></table>
+        </td></tr>`;
+      }
+      if (item.decisions.length) {
+        body += `<tr><th>관장 확인·결정<br>필요 사항</th><td>
+          <table class="inner"><tbody>
+          ${item.decisions.map(d => `<tr><td style="white-space:pre-wrap;text-align:left;">${escapeHtml(d.content)}</td></tr>`).join('')}
+          </tbody></table>
+        </td></tr>`;
+      }
+      body += `</table>`;
+    });
+    body += `</div>`;
+  });
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${escapeHtml(post.title)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: '바탕', 'Batang', serif; color:#000; margin:0; padding:20px; }
+    .toolbar { text-align:center; margin-bottom:16px; }
+    .toolbar button { padding:10px 24px; font-size:1rem; border:1px solid #003876; background:#003876; color:#fff; border-radius:8px; cursor:pointer; }
+    .cover { text-align:center; padding:200px 0 100px; page-break-after: always; }
+    .cover h1 { font-size:2.6rem; margin-bottom:30px; }
+    .cover-date, .cover-title { font-size:1.2rem; margin:10px 0; }
+    .page { page-break-after: always; padding: 10px 0; }
+    .page:last-child { page-break-after: auto; }
+    .reporter-name { text-align:right; font-weight:700; margin-bottom:10px; }
+    h3 { font-size:1rem; margin: 14px 0 6px; }
+    table { width:100%; border-collapse: collapse; margin-bottom:14px; font-size:0.85rem; }
+    th, td { border:1px solid #000; padding:6px 8px; }
+    th { background:#f0f0f0; }
+    table.kv th { width:120px; background:#f7f7f7; text-align:center; font-weight:600; }
+    table.inner, table.inner th, table.inner td { border: 1px solid #999; }
+    table.inner { margin-bottom:0; }
+    .item-title { font-weight:700; margin: 12px 0 4px; }
+    @media print {
+      .toolbar { display:none; }
+    }
+  </style>
+  </head><body>
+  <div class="toolbar"><button onclick="window.print()">🖨️ 인쇄 / PDF로 저장</button></div>
+  ${body}
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+}
+
+applyAdminUI();
+document.getElementById('postList').innerHTML = '<li class="empty">불러오는 중...</li>';
+</script>
+</body>
+</html>
