@@ -675,8 +675,24 @@ const COOP_STATUS_OPTIONS = ['진행예정','진행중','진행완료'];
 
 let dataReady = false;
 
+function serializeForFirestore(obj) {
+  // Firestore does not support nested arrays (array-of-arrays).
+  // Convert table bullet rows (2D array) to a JSON string before saving.
+  const clone = JSON.parse(JSON.stringify(obj));
+  function walk(o) {
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    if (!o || typeof o !== 'object') return;
+    if (o.type === 'table' && Array.isArray(o.rows)) {
+      o.rowsJson = JSON.stringify(o.rows);
+      delete o.rows;
+    }
+    Object.values(o).forEach(walk);
+  }
+  walk(clone);
+  return clone;
+}
 function saveData() {
-  docRef.set(data).catch(err => {
+  docRef.set(serializeForFirestore(data)).catch(err => {
     alert('저장 중 오류가 발생했습니다: ' + err.message);
   });
 }
@@ -880,7 +896,11 @@ function normalizeBullets(bullets) {
   if (!bullets || !bullets.length) return [newTextBullet(0)];
   return bullets.map(b => {
     if (typeof b === 'string') return { type: 'text', level: 0, text: b };
-    if (b.type === 'table') return { type: 'table', rows: (b.rows && b.rows.length) ? b.rows : [['', ''], ['', '']] };
+    if (b.type === 'table') {
+      let rows = b.rows;
+      if (!rows && b.rowsJson) { try { rows = JSON.parse(b.rowsJson); } catch(e) {} }
+      return { type: 'table', rows: (rows && rows.length) ? rows : [['', ''], ['', '']] };
+    }
     return { type: 'text', level: b.level || 0, text: b.text || '' };
   });
 }
@@ -916,14 +936,18 @@ function flattenGroupBullets(groups) {
 function procLabel(overviewIdx, procIdx) {
   return `[${overviewIdx + 1}-${procIdx + 1}]`;
 }
+function hasBulletContent(bullets) {
+  return (bullets || []).some(b => {
+    if (b.type === 'table') return b.rows.some(row => row.some(c => c && c.trim()));
+    return b.text && b.text.trim();
+  });
+}
 function renderBulletsView(bullets) {
-  if (!bullets || !bullets.length) return '<p>-</p>';
+  if (!hasBulletContent(bullets)) return '<p>-</p>';
   let out = '';
-  let has = false;
   bullets.forEach(b => {
     if (b.type === 'table') {
       if (!b.rows.some(row => row.some(c => c && c.trim()))) return;
-      has = true;
       out += '<table class="view-table"><tbody>';
       b.rows.forEach(row => {
         out += '<tr>' + row.map(c => `<td>${escapeHtml(c)}</td>`).join('') + '</tr>';
@@ -931,12 +955,11 @@ function renderBulletsView(bullets) {
       out += '</tbody></table>';
     } else {
       if (!b.text || !b.text.trim()) return;
-      has = true;
       const marker = BULLET_MARKERS[b.level || 0] || '○';
       out += `<p style="white-space:pre-wrap; margin-left:${(b.level || 0) * 16}px;">${marker} ${escapeHtml(b.text)}</p>`;
     }
   });
-  return has ? out : '<p>-</p>';
+  return out;
 }
 function splitToBullets(text) {
   if (!text) return [''];
@@ -1493,6 +1516,8 @@ function exportPost() {
     }
     body += `<h3>2. 주간보고 대상 업무</h3>`;
     r.items.forEach(item => {
+      const lastWeekFlat = flattenGroupBullets(item.lastWeekGroups);
+      const resultFlat = flattenGroupBullets(item.resultGroups);
       body += `<p class="item-title">${escapeHtml(item.title)}</p>
         <table class="kv">
           <tr><th style="width:120px;">보고대상 선정기준</th><td>${[
@@ -1501,8 +1526,8 @@ function exportPost() {
             item.criteria.share ? '☑' : '☐', '이번 주 계획 공유 필요&nbsp;&nbsp;&nbsp;',
             item.criteria.coop ? '☑' : '☐', '협조 필요'
           ].join(' ')}</td></tr>
-          <tr><th>지난 주 완료 내용</th><td>${renderBulletsView(flattenGroupBullets(item.lastWeekGroups))}</td></tr>
-          <tr><th>지난 주 완료·성과<br>(${item.resultHas==='yes'?'있음':'없음'})</th><td>${renderBulletsView(flattenGroupBullets(item.resultGroups))}</td></tr>
+          ${hasBulletContent(lastWeekFlat) ? `<tr><th>지난 주 완료 내용</th><td>${renderBulletsView(lastWeekFlat)}</td></tr>` : ''}
+          ${hasBulletContent(resultFlat) ? `<tr><th>지난 주 완료·성과<br>(${item.resultHas==='yes'?'있음':'없음'})</th><td>${renderBulletsView(resultFlat)}</td></tr>` : ''}
           <tr><th>이번 주 계획</th><td>
             <table class="inner"><thead><tr><th>내용</th><th style="width:80px;">기한</th></tr></thead><tbody>
             ${item.plans.map(p => `<tr><td style="text-align:left;">${renderBulletsView(p.bullets)}</td><td style="text-align:center;">${escapeHtml(p.deadline)}</td></tr>`).join('')}
