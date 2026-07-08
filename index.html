@@ -480,15 +480,31 @@
     border-radius: 8px;
     padding: 8px;
   }
+  .mini-table-wrap { overflow-x: auto; }
+  .mini-table-toolbar { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; align-items: center; }
   .mini-table {
-    width: 100%;
     border-collapse: collapse;
     margin-bottom: 6px;
+    table-layout: fixed;
   }
   .mini-table td {
     border: 1px solid #d8e3f0;
     padding: 0;
+    position: relative;
   }
+  .mini-table td.cell-selected {
+    background: rgba(0,96,168,0.13);
+    outline: 2px solid #0060A8;
+    outline-offset: -2px;
+  }
+  .col-resize-handle {
+    position: absolute;
+    right: -3px; top: 0;
+    width: 6px; height: 100%;
+    cursor: col-resize;
+    z-index: 5;
+  }
+  .col-resize-handle:hover { background: rgba(0,96,168,0.35); }
   .mini-table input {
     width: 100%;
     border: none;
@@ -496,15 +512,11 @@
     font-size: 0.85rem;
     font-family: inherit;
     background: transparent;
+    box-sizing: border-box;
   }
-  .mini-table input:focus {
-    outline: 1px solid #003876;
-  }
-  .mini-table-actions {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-  }
+  .mini-table input:focus { outline: 1px solid #003876; }
+  .mini-table-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+  .sel-toggle.active { background: #003876 !important; color: #fff !important; }
   .view-table {
     width: 100%;
     border-collapse: collapse;
@@ -890,7 +902,12 @@ function newTextBullet(level) {
   return { type: 'text', level: level || 0, text: '' };
 }
 function newTableBullet() {
-  return { type: 'table', rows: [['', ''], ['', '']] };
+  return { type: 'table', colWidths: [120, 120], rows: [[{v:''},{v:''}],[{v:''},{v:''}]] };
+}
+function normCell(c) {
+  if (c === null) return null;
+  if (typeof c === 'string') return { v: c };
+  return { v: c.v || '', ...(c.cs > 1 ? {cs: c.cs} : {}), ...(c.rs > 1 ? {rs: c.rs} : {}) };
 }
 function normalizeBullets(bullets) {
   if (!bullets || !bullets.length) return [newTextBullet(0)];
@@ -899,7 +916,12 @@ function normalizeBullets(bullets) {
     if (b.type === 'table') {
       let rows = b.rows;
       if (!rows && b.rowsJson) { try { rows = JSON.parse(b.rowsJson); } catch(e) {} }
-      return { type: 'table', rows: (rows && rows.length) ? rows : [['', ''], ['', '']] };
+      if (!rows || !rows.length) rows = [['',''],['','']];
+      rows = rows.map(row => row.map(normCell));
+      const numCols = Math.max(...rows.map(r => r.length));
+      const colWidths = (b.colWidths && b.colWidths.length === numCols)
+        ? b.colWidths : Array(numCols).fill(120);
+      return { type: 'table', colWidths, rows };
     }
     return { type: 'text', level: b.level || 0, text: b.text || '' };
   });
@@ -938,21 +960,31 @@ function procLabel(overviewIdx, procIdx) {
 }
 function hasBulletContent(bullets) {
   return (bullets || []).some(b => {
-    if (b.type === 'table') return b.rows.some(row => row.some(c => c && c.trim()));
+    if (b.type === 'table') return b.rows.some(row => row.some(c => c && c.v && c.v.trim()));
     return b.text && b.text.trim();
   });
+}
+function renderTableHtml(b, cls) {
+  let out = `<table class="${cls}"><tbody>`;
+  b.rows.forEach(row => {
+    out += '<tr>';
+    row.forEach(c => {
+      if (c === null) return;
+      const cs = c.cs > 1 ? ` colspan="${c.cs}"` : '';
+      const rs = c.rs > 1 ? ` rowspan="${c.rs}"` : '';
+      out += `<td${cs}${rs}>${escapeHtml(c.v || '')}</td>`;
+    });
+    out += '</tr>';
+  });
+  return out + '</tbody></table>';
 }
 function renderBulletsView(bullets) {
   if (!hasBulletContent(bullets)) return '<p>-</p>';
   let out = '';
   bullets.forEach(b => {
     if (b.type === 'table') {
-      if (!b.rows.some(row => row.some(c => c && c.trim()))) return;
-      out += '<table class="view-table"><tbody>';
-      b.rows.forEach(row => {
-        out += '<tr>' + row.map(c => `<td>${escapeHtml(c)}</td>`).join('') + '</tr>';
-      });
-      out += '</tbody></table>';
+      if (!b.rows.some(row => row.some(c => c && c.v && c.v.trim()))) return;
+      out += renderTableHtml(b, 'view-table');
     } else {
       if (!b.text || !b.text.trim()) return;
       const marker = BULLET_MARKERS[b.level || 0] || '○';
@@ -1061,6 +1093,82 @@ function renderEditForm() {
     </div>`;
 
   area.innerHTML = html;
+  setTimeout(initTableInteraction, 0);
+}
+
+// ---------- 표 열 너비 조절 + 셀 선택 모드 ----------
+let tableSelectState = null;
+
+function updateTableSelectUI() {
+  document.querySelectorAll('.mini-table td.cell-selected').forEach(td => td.classList.remove('cell-selected'));
+  document.querySelectorAll('.sel-toggle').forEach(btn => {
+    const key = btn.dataset.item + '-' + (btn.dataset.group||'') + (btn.dataset.plan||'') + '-' + btn.dataset.bidx;
+    btn.classList.toggle('active', !!(tableSelectState && tableSelectState.key === key));
+  });
+  if (!tableSelectState || !tableSelectState.cells.size) return;
+  const ds = tableSelectState.ds;
+  document.querySelectorAll('.mini-table').forEach(tbl => {
+    if (tbl.dataset.item !== ds.item || tbl.dataset.bidx !== ds.bidx) return;
+    if ((tbl.dataset.group||'') !== (ds.group||'') || (tbl.dataset.plan||'') !== (ds.plan||'')) return;
+    tbl.querySelectorAll('td').forEach(td => {
+      const inp = td.querySelector('input');
+      if (inp && tableSelectState.cells.has(inp.dataset.trow + ',' + inp.dataset.tcol))
+        td.classList.add('cell-selected');
+    });
+  });
+}
+
+function initTableInteraction() {
+  // 열 너비 드래그 리사이즈
+  document.querySelectorAll('.mini-table').forEach(tbl => {
+    const cols = tbl.querySelectorAll('col');
+    tbl.querySelectorAll('td').forEach(td => {
+      const handle = td.querySelector('.col-resize-handle');
+      if (!handle) return;
+      const ci = +handle.dataset.col;
+      if (ci >= cols.length) return;
+      handle.addEventListener('mousedown', ev => {
+        ev.preventDefault(); ev.stopPropagation();
+        const startX = ev.pageX;
+        const startW = parseInt(cols[ci].style.width) || 120;
+        const onMove = e => {
+          cols[ci].style.width = Math.max(40, startW + e.pageX - startX) + 'px';
+        };
+        const onUp = e => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          const newW = Math.max(40, startW + e.pageX - startX);
+          const b = getBulletArray(tbl.dataset)[+tbl.dataset.bidx];
+          if (!b.colWidths) b.colWidths = Array(cols.length).fill(120);
+          b.colWidths[ci] = newW;
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
+  });
+
+  // 셀 선택 클릭 (선택 모드일 때만)
+  document.querySelectorAll('.mini-table td').forEach(td => {
+    td.addEventListener('click', e => {
+      if (!tableSelectState) return;
+      const tbl = td.closest('.mini-table');
+      if (!tbl) return;
+      const ds = tableSelectState.ds;
+      if (tbl.dataset.item !== ds.item || tbl.dataset.bidx !== ds.bidx) return;
+      if ((tbl.dataset.group||'') !== (ds.group||'') || (tbl.dataset.plan||'') !== (ds.plan||'')) return;
+      const inp = td.querySelector('input');
+      if (!inp) return;
+      e.preventDefault();
+      inp.blur();
+      const cellKey = inp.dataset.trow + ',' + inp.dataset.tcol;
+      if (tableSelectState.cells.has(cellKey)) tableSelectState.cells.delete(cellKey);
+      else tableSelectState.cells.add(cellKey);
+      updateTableSelectUI();
+    });
+  });
+
+  updateTableSelectUI();
 }
 
 function renderBulletEditor(bullets, itemIdx, field, groupAttr) {
@@ -1068,20 +1176,38 @@ function renderBulletEditor(bullets, itemIdx, field, groupAttr) {
   let html = '<div class="bullet-editor">';
   bullets.forEach((b, k) => {
     if (b.type === 'table') {
+      const da = `data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-bidx="${k}"`;
+      const cws = b.colWidths || b.rows[0].map(() => 120);
       html += `<div class="bullet-row table-row">
-        <table class="mini-table"><tbody>`;
-      b.rows.forEach((row, ri) => {
-        html += '<tr>' + row.map((cell, ci) => `<td><input type="text" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-bidx="${k}" data-trow="${ri}" data-tcol="${ci}" value="${escapeHtml(cell)}"></td>`).join('') + '</tr>';
-      });
-      html += `</tbody></table>
-        <div class="mini-table-actions">
-          <button class="small-btn" data-action="table-add-row" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-bidx="${k}">+ 행</button>
-          <button class="small-btn" data-action="table-del-row" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-bidx="${k}">- 행</button>
-          <button class="small-btn" data-action="table-add-col" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-bidx="${k}">+ 열</button>
-          <button class="small-btn" data-action="table-del-col" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-bidx="${k}">- 열</button>
-          <button class="small-btn danger" data-action="del-bullet" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-idx="${k}">✕ 표 삭제</button>
+        <div class="mini-table-toolbar">
+          <button class="small-btn sel-toggle" data-action="table-sel-toggle" ${da}>선택 모드</button>
+          <button class="small-btn" data-action="table-merge" ${da}>병합</button>
+          <button class="small-btn" data-action="table-unmerge" ${da}>분할</button>
+          <span style="color:#bbb;">|</span>
+          <button class="small-btn" data-action="table-add-row" ${da}>+ 행</button>
+          <button class="small-btn" data-action="table-del-row" ${da}>- 행</button>
+          <button class="small-btn" data-action="table-add-col" ${da}>+ 열</button>
+          <button class="small-btn" data-action="table-del-col" ${da}>- 열</button>
+          <button class="small-btn danger" data-action="del-bullet" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-idx="${k}">✕ 삭제</button>
         </div>
-      </div>`;
+        <div class="mini-table-wrap">
+        <table class="mini-table" ${da}>
+          <colgroup>${cws.map(w => `<col style="width:${w}px">`).join('')}</colgroup>
+          <tbody>`;
+      b.rows.forEach((row, ri) => {
+        html += '<tr>';
+        row.forEach((cell, ci) => {
+          if (cell === null) return;
+          const cs = cell.cs > 1 ? ` colspan="${cell.cs}"` : '';
+          const rs = cell.rs > 1 ? ` rowspan="${cell.rs}"` : '';
+          html += `<td${cs}${rs}>
+            <input type="text" ${da} data-trow="${ri}" data-tcol="${ci}" value="${escapeHtml(cell.v || '')}">
+            <div class="col-resize-handle" data-col="${ci}"></div>
+          </td>`;
+        });
+        html += '</tr>';
+      });
+      html += `</tbody></table></div></div>`;
     } else if (k === 0) {
       const marker = BULLET_MARKERS[0];
       html += `<div class="bullet-row">
@@ -1247,7 +1373,7 @@ function handleEditInput(e) {
     } else if (t.dataset.bf !== undefined) {
       const b = getBulletArray(t.dataset)[+t.dataset.bidx];
       if (t.dataset.trow !== undefined) {
-        b.rows[+t.dataset.trow][+t.dataset.tcol] = t.value;
+        b.rows[+t.dataset.trow][+t.dataset.tcol].v = t.value;
       } else {
         b.text = t.value;
       }
@@ -1304,9 +1430,51 @@ document.getElementById('editArea').addEventListener('click', (e) => {
     const range = max - min + 1;
     b.level = min + (((b.level || 0) - min + 1) % range);
   }
+  else if (action === 'table-sel-toggle') {
+    const key = btn.dataset.item + '-' + (btn.dataset.group||'') + (btn.dataset.plan||'') + '-' + btn.dataset.bidx;
+    if (tableSelectState && tableSelectState.key === key) {
+      tableSelectState = null;
+    } else {
+      tableSelectState = { key, ds: {...btn.dataset}, cells: new Set() };
+    }
+    updateTableSelectUI();
+    return;
+  }
+  else if (action === 'table-merge') {
+    if (!tableSelectState || tableSelectState.cells.size < 2) { alert('병합할 셀을 2개 이상 선택하세요.'); return; }
+    const b = getBulletArray(btn.dataset)[+btn.dataset.bidx];
+    const pts = Array.from(tableSelectState.cells).map(s => s.split(',').map(Number));
+    const r1 = Math.min(...pts.map(p=>p[0])), r2 = Math.max(...pts.map(p=>p[0]));
+    const c1 = Math.min(...pts.map(p=>p[1])), c2 = Math.max(...pts.map(p=>p[1]));
+    const vals = [];
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+      const cell = b.rows[r][c];
+      if (cell && cell.v && cell.v.trim()) vals.push(cell.v.trim());
+    }
+    b.rows[r1][c1] = { v: vals.join(' '), ...(c2>c1?{cs:c2-c1+1}:{}), ...(r2>r1?{rs:r2-r1+1}:{}) };
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+      if (r === r1 && c === c1) continue;
+      b.rows[r][c] = null;
+    }
+    tableSelectState = null;
+  }
+  else if (action === 'table-unmerge') {
+    if (!tableSelectState || tableSelectState.cells.size !== 1) { alert('분할할 셀 1개를 선택하세요.'); return; }
+    const b = getBulletArray(btn.dataset)[+btn.dataset.bidx];
+    const [r, c] = Array.from(tableSelectState.cells)[0].split(',').map(Number);
+    const cell = b.rows[r][c];
+    if (!cell) return;
+    const cs = cell.cs || 1, rs = cell.rs || 1;
+    b.rows[r][c] = { v: cell.v };
+    for (let ri = r; ri < r + rs; ri++) for (let ci = c; ci < c + cs; ci++) {
+      if (ri === r && ci === c) continue;
+      b.rows[ri][ci] = { v: '' };
+    }
+    tableSelectState = null;
+  }
   else if (action === 'table-add-row') {
     const b = getBulletArray(btn.dataset)[+btn.dataset.bidx];
-    b.rows.push(b.rows[0].map(() => ''));
+    b.rows.push(b.rows[0].map(() => ({v:''})));
   }
   else if (action === 'table-del-row') {
     const b = getBulletArray(btn.dataset)[+btn.dataset.bidx];
@@ -1314,11 +1482,16 @@ document.getElementById('editArea').addEventListener('click', (e) => {
   }
   else if (action === 'table-add-col') {
     const b = getBulletArray(btn.dataset)[+btn.dataset.bidx];
-    b.rows.forEach(row => row.push(''));
+    b.rows.forEach(row => row.push({v:''}));
+    if (!b.colWidths) b.colWidths = Array(b.rows[0].length - 1).fill(120);
+    b.colWidths.push(120);
   }
   else if (action === 'table-del-col') {
     const b = getBulletArray(btn.dataset)[+btn.dataset.bidx];
-    if (b.rows[0].length > 1) b.rows.forEach(row => row.pop());
+    if (b.rows[0].length > 1) {
+      b.rows.forEach(row => row.pop());
+      if (b.colWidths && b.colWidths.length > 1) b.colWidths.pop();
+    }
   }
   else if (action === 'add-coop') draft.items[+btn.dataset.item].coops.push({ dept: '', content: '', status: '진행예정' });
   else if (action === 'del-coop') draft.items[+btn.dataset.item].coops.splice(+btn.dataset.idx, 1);
@@ -1326,6 +1499,71 @@ document.getElementById('editArea').addEventListener('click', (e) => {
   else if (action === 'del-decision') draft.items[+btn.dataset.item].decisions.splice(+btn.dataset.idx, 1);
   else if (action === 'save-draft') { saveDraft(); return; }
   else return;
+  renderEditForm();
+});
+
+// ---------- 한글/엑셀 표 붙여넣기 ----------
+document.getElementById('editArea').addEventListener('paste', (e) => {
+  const t = e.target;
+  if (!t.matches('input[data-trow]')) return;
+
+  let pasteRows = null;
+
+  // 1순위: HTML 파싱 (한글워드프로세서, Word 등 — 열 구조 보존)
+  const html = (e.clipboardData || window.clipboardData).getData('text/html');
+  if (html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const table = div.querySelector('table');
+    if (table) {
+      const rows = [];
+      table.querySelectorAll('tr').forEach(tr => {
+        const cells = Array.from(tr.querySelectorAll('td, th')).map(td =>
+          (td.innerText || td.textContent || '').replace(/\s*\n\s*/g, ' ').trim()
+        );
+        if (cells.some(c => c)) rows.push(cells);
+      });
+      if (rows.length) pasteRows = rows;
+    }
+  }
+
+  // 2순위: TSV 파싱 (엑셀, 구글시트 등)
+  if (!pasteRows) {
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    if (!text || (!text.includes('\t') && !text.includes('\n'))) return;
+    pasteRows = text.trimEnd().split('\n').map(row =>
+      row.split('\t').map(c => c.replace(/\r$/, '').trim())
+    );
+  }
+
+  if (!pasteRows || !pasteRows.length) return;
+  e.preventDefault();
+
+  const b = getBulletArray(t.dataset)[+t.dataset.bidx];
+  const startRow = +t.dataset.trow;
+  const startCol = +t.dataset.tcol;
+  const needCols = startCol + Math.max(...pasteRows.map(r => r.length));
+
+  // 열 부족 시 확장
+  while (b.rows[0].length < needCols) {
+    b.rows.forEach(r => r.push({v:''}));
+    if (b.colWidths) b.colWidths.push(120);
+  }
+
+  pasteRows.forEach((rowData, ri) => {
+    const targetRow = startRow + ri;
+    // 행 부족 시 확장
+    while (b.rows.length <= targetRow) b.rows.push(b.rows[0].map(() => ({v:''})));
+    rowData.forEach((cell, ci) => {
+      const tc = startCol + ci;
+      if (tc < b.rows[targetRow].length) {
+        const existing = b.rows[targetRow][tc];
+        if (existing === null) b.rows[targetRow][tc] = {v: cell};
+        else if (existing) existing.v = cell;
+      }
+    });
+  });
+
   renderEditForm();
 });
 
@@ -1455,7 +1693,7 @@ function renderReporterReadonly(r) {
       <div class="bullet-view">${renderBulletsView(flattenGroupBullets(item.resultGroups))}</div>
 
       <div class="label-line">이번 주 계획</div>`;
-    if (item.plans.some(p => (p.bullets || []).some(b => (b.type === 'table' && b.rows.some(row => row.some(c => c && c.trim()))) || (b.text && b.text.trim())) || p.deadline)) {
+    if (item.plans.some(p => hasBulletContent(p.bullets) || p.deadline)) {
       html += `<table class="sub-table"><thead><tr><th>내용</th><th style="width:90px;">기한</th></tr></thead><tbody>`;
       item.plans.forEach(p => {
         html += `<tr><td>${renderBulletsView(p.bullets)}</td><td>${escapeHtml(p.deadline)}</td></tr>`;
