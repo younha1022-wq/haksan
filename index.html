@@ -715,6 +715,19 @@ function serializeForFirestore(obj) {
   walk(clone);
   return clone;
 }
+function deserializeFromFirestore(obj) {
+  function walk(o) {
+    if (Array.isArray(o)) { o.forEach(walk); return; }
+    if (!o || typeof o !== 'object') return;
+    if (o.type === 'table' && typeof o.rowsJson === 'string') {
+      try { o.rows = JSON.parse(o.rowsJson); } catch(e) { o.rows = []; }
+      delete o.rowsJson;
+    }
+    Object.values(o).forEach(walk);
+  }
+  walk(obj);
+  return obj;
+}
 function saveData() {
   docRef.set(serializeForFirestore(data)).catch(err => {
     alert('저장 중 오류가 발생했습니다: ' + err.message);
@@ -724,7 +737,7 @@ function saveData() {
 // 실시간 동기화: 다른 사용자의 변경 사항이 자동으로 반영됩니다.
 docRef.onSnapshot((snap) => {
   if (snap.exists) {
-    data = snap.data();
+    data = deserializeFromFirestore(snap.data());
     if (!data.posts) data.posts = [];
   } else {
     data = { posts: [] };
@@ -741,8 +754,12 @@ docRef.onSnapshot((snap) => {
     const post = getCurrentPost();
     if (!post) { showList(); return; }
     renderReporterSelect();
-    renderReporters();
     renderPostList();
+    if (isDragging) {
+      rerenderPending = true;
+    } else {
+      renderReporters();
+    }
   } else {
     renderPostList();
   }
@@ -1110,6 +1127,9 @@ function renderEditForm() {
 
 // ---------- 표 열 너비 조절 + 셀 선택 모드 ----------
 let tableSelectState = null;
+let dragSrcIdx = null;
+let isDragging = false;
+let rerenderPending = false;
 
 function updateTableSelectUI() {
   document.querySelectorAll('.mini-table td.cell-selected').forEach(td => td.classList.remove('cell-selected'));
@@ -1629,16 +1649,23 @@ function renderReporters() {
   });
 
   if (isAdmin) {
-    let dragSrcIdx = null;
     container.querySelectorAll('.reporter-card[draggable]').forEach(card => {
       card.addEventListener('dragstart', e => {
-        dragSrcIdx = +card.dataset.dragIdx;
-        card.classList.add('dragging');
+        isDragging = true;
+        e.dataTransfer.setData('text/plain', card.dataset.dragIdx);
         e.dataTransfer.effectAllowed = 'move';
+        card.classList.add('dragging');
       });
       card.addEventListener('dragend', () => {
-        card.classList.remove('dragging');
-        container.querySelectorAll('.reporter-card').forEach(c => c.classList.remove('drag-over'));
+        isDragging = false;
+        container.querySelectorAll('.reporter-card').forEach(c => {
+          c.classList.remove('dragging');
+          c.classList.remove('drag-over');
+        });
+        if (rerenderPending) {
+          rerenderPending = false;
+          renderReporters();
+        }
       });
       card.addEventListener('dragover', e => {
         e.preventDefault();
@@ -1648,13 +1675,13 @@ function renderReporters() {
       });
       card.addEventListener('drop', e => {
         e.preventDefault();
+        const srcIdx = +e.dataTransfer.getData('text/plain');
         const destIdx = +card.dataset.dragIdx;
-        if (dragSrcIdx === null || dragSrcIdx === destIdx) return;
+        if (isNaN(srcIdx) || srcIdx === destIdx) return;
         const post = getCurrentPost();
-        const moved = post.reporters.splice(dragSrcIdx, 1)[0];
+        const moved = post.reporters.splice(srcIdx, 1)[0];
         post.reporters.splice(destIdx, 0, moved);
         saveData();
-        renderReporters();
       });
     });
   }
