@@ -541,7 +541,19 @@
     border-radius: 12px;
     margin-bottom: 12px;
     overflow: hidden;
+    transition: opacity 0.15s;
   }
+  .reporter-card.dragging { opacity: 0.35; }
+  .reporter-card.drag-over { border: 2px dashed #0060A8; background: #eef5ff; }
+  .drag-handle {
+    cursor: grab;
+    color: #bbb;
+    font-size: 1.1rem;
+    padding: 0 6px 0 0;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .drag-handle:active { cursor: grabbing; }
   .reporter-card-head {
     display: flex;
     justify-content: space-between;
@@ -1593,12 +1605,13 @@ function renderReporters() {
     return;
   }
   container.innerHTML = post.reporters.map((r, idx) => {
-    return `<div class="reporter-card">
+    return `<div class="reporter-card" ${isAdmin ? `draggable="true" data-drag-idx="${idx}"` : ''}>
       <div class="reporter-card-head" data-toggle="${idx}">
-        <div><span class="name">${escapeHtml(r.name)}</span><span class="count">보고 항목 ${r.items.length}건</span></div>
+        <div style="display:flex;align-items:center;">
+          ${isAdmin ? `<span class="drag-handle" title="드래그하여 순서 변경">⠿</span>` : ''}
+          <span class="name">${escapeHtml(r.name)}</span><span class="count">보고 항목 ${r.items.length}건</span>
+        </div>
         <div class="reporter-card-actions">
-          ${isAdmin ? `<button class="small-btn" data-move-up="${idx}" ${idx === 0 ? 'disabled' : ''}>▲</button>
-          <button class="small-btn" data-move-down="${idx}" ${idx === post.reporters.length - 1 ? 'disabled' : ''}>▼</button>` : ''}
           <button class="small-btn" data-edit="${r.id}">수정</button>
           ${isAdmin ? `<button class="small-btn danger" data-del="${r.id}">삭제</button>` : ''}
         </div>
@@ -1614,26 +1627,37 @@ function renderReporters() {
       document.getElementById(`reporter-body-${idx}`).classList.toggle('open');
     });
   });
-  container.querySelectorAll('[data-move-up]').forEach(b => {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = +b.dataset.moveUp;
-      const post = getCurrentPost();
-      [post.reporters[idx - 1], post.reporters[idx]] = [post.reporters[idx], post.reporters[idx - 1]];
-      saveData();
-      renderReporters();
+
+  if (isAdmin) {
+    let dragSrcIdx = null;
+    container.querySelectorAll('.reporter-card[draggable]').forEach(card => {
+      card.addEventListener('dragstart', e => {
+        dragSrcIdx = +card.dataset.dragIdx;
+        card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      card.addEventListener('dragend', () => {
+        card.classList.remove('dragging');
+        container.querySelectorAll('.reporter-card').forEach(c => c.classList.remove('drag-over'));
+      });
+      card.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        container.querySelectorAll('.reporter-card').forEach(c => c.classList.remove('drag-over'));
+        card.classList.add('drag-over');
+      });
+      card.addEventListener('drop', e => {
+        e.preventDefault();
+        const destIdx = +card.dataset.dragIdx;
+        if (dragSrcIdx === null || dragSrcIdx === destIdx) return;
+        const post = getCurrentPost();
+        const moved = post.reporters.splice(dragSrcIdx, 1)[0];
+        post.reporters.splice(destIdx, 0, moved);
+        saveData();
+        renderReporters();
+      });
     });
-  });
-  container.querySelectorAll('[data-move-down]').forEach(b => {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = +b.dataset.moveDown;
-      const post = getCurrentPost();
-      [post.reporters[idx + 1], post.reporters[idx]] = [post.reporters[idx], post.reporters[idx + 1]];
-      saveData();
-      renderReporters();
-    });
-  });
+  }
   container.querySelectorAll('[data-edit]').forEach(b => {
     b.addEventListener('click', () => {
       document.getElementById('loadReporterSelect').value = b.dataset.edit;
