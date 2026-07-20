@@ -554,6 +554,33 @@
     flex-shrink: 0;
   }
   .drag-handle:active { cursor: grabbing; }
+  /* ---------- 피드백 ---------- */
+  @keyframes fab-pulse { 0%,100%{box-shadow:0 4px 14px rgba(0,96,168,.5),0 0 0 0 rgba(0,96,168,.35)} 60%{box-shadow:0 4px 14px rgba(0,96,168,.5),0 0 0 10px rgba(0,96,168,0)} }
+  .feedback-fab { position:fixed; bottom:28px; right:28px; height:46px; padding:0 20px 0 14px; border-radius:23px; background:#0060A8; color:#fff; border:none; font-size:0.95rem; font-weight:700; cursor:pointer; z-index:900; display:flex; align-items:center; gap:7px; animation:fab-pulse 2.4s ease-in-out infinite; transition:background .15s,transform .12s; letter-spacing:.3px; }
+  .feedback-fab:hover { background:#003876; transform:scale(1.05); animation:none; box-shadow:0 4px 18px rgba(0,96,168,.55); }
+  .feedback-fab .fab-icon { font-size:1.2rem; line-height:1; }
+  .feedback-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center; }
+  .feedback-modal.open { display:flex; }
+  .feedback-modal-box { background:#fff; border-radius:12px; padding:28px 24px 20px; width:340px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.18); }
+  .feedback-modal-box h3 { margin:0 0 16px; color:#003876; font-size:1.05rem; }
+  .star-row { display:flex; gap:6px; margin-bottom:14px; }
+  .star-btn { font-size:1.7rem; background:none; border:none; cursor:pointer; color:#ddd; padding:0; line-height:1; transition:color .1s; }
+  .star-btn.active, .star-btn:hover, .star-btn.hover { color:#f5a623; }
+  #feedbackText { width:100%; height:90px; border:1px solid #ccc; border-radius:6px; padding:8px; font-size:0.9rem; resize:vertical; box-sizing:border-box; font-family:inherit; }
+  .feedback-modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+  .feedback-modal-actions button { padding:7px 18px; border-radius:6px; border:none; cursor:pointer; font-size:0.9rem; }
+  #feedbackCancelBtn { background:#eee; color:#555; }
+  #feedbackSubmitBtn { background:#0060A8; color:#fff; }
+  #feedbackSubmitBtn:disabled { opacity:.6; cursor:default; }
+  .feedback-section { margin-top:18px; border-top:1px solid #eee; padding-top:14px; }
+  .feedback-section h3 { font-size:0.95rem; color:#003876; margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+  .feedback-list { display:flex; flex-direction:column; gap:8px; max-height:320px; overflow-y:auto; }
+  .feedback-item { background:#f8f9fc; border:1px solid #e8ecf4; border-radius:8px; padding:10px 12px; }
+  .feedback-meta { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+  .feedback-stars { color:#f5a623; font-size:1rem; letter-spacing:1px; }
+  .feedback-date { font-size:0.75rem; color:#999; }
+  .feedback-content { margin:0; font-size:0.88rem; color:#333; white-space:pre-wrap; }
+  .feedback-empty { color:#aaa; font-size:0.88rem; text-align:center; padding:16px 0; }
   .reporter-card-head {
     display: flex;
     justify-content: space-between;
@@ -642,6 +669,10 @@
         <input type="text" id="newPostTitle" placeholder="예: 2026년 6월 2주차 업무보고" />
         <input type="date" id="newPostDate" />
         <button onclick="addPost()">생성</button>
+      </div>
+      <div class="feedback-section">
+        <h3>💬 이용자 피드백 <button class="small-btn" onclick="loadFeedback()">새로고침</button></h3>
+        <div class="feedback-list" id="feedbackList"><p class="feedback-empty">새로고침을 눌러 불러오세요.</p></div>
       </div>
     </div>
   </div>
@@ -1785,6 +1816,9 @@ function exportPost() {
     <p class="cover-title">${escapeHtml(post.title)}</p>
   </div>`;
 
+  let _brkId = 0;
+  const brkHandle = id => `<div class="break-handle" data-target="${id}" onclick="toggleBreak(this)"><span class="bh-off">···· 클릭하면 여기서 페이지 나누기 ····</span><span class="bh-on">✂ 페이지 나누기 설정됨 (다시 클릭하면 해제)</span></div>`;
+
   post.reporters.forEach(r => {
     body += `<div class="page">
       <p class="reporter-name">보고자: ${escapeHtml(r.name)}</p>
@@ -1804,10 +1838,13 @@ function exportPost() {
       body += `</tbody></table>`;
     }
     body += `<h3>2. 주간보고 대상 업무</h3>`;
-    r.items.forEach(item => {
+    r.items.forEach((item, idx) => {
+      const tid = 'brk' + (_brkId++);
+      if (idx > 0) body += brkHandle(tid);
       const lastWeekFlat = flattenGroupBullets(item.lastWeekGroups);
       const resultFlat = flattenGroupBullets(item.resultGroups);
-      body += `<p class="item-title">${escapeHtml(item.title)}</p>
+      body += `<div class="print-item" id="${tid}">
+        <p class="item-title">${escapeHtml(item.title)}</p>
         <table class="kv">
           <tr><th style="width:120px;">보고대상 선정기준</th><td>${[
             item.criteria.progress ? '☑' : '☐', '지난 주 주요진행사항 있음&nbsp;&nbsp;&nbsp;',
@@ -1815,28 +1852,28 @@ function exportPost() {
             item.criteria.share ? '☑' : '☐', '이번 주 계획 공유 필요&nbsp;&nbsp;&nbsp;',
             item.criteria.coop ? '☑' : '☐', '협조 필요'
           ].join(' ')}</td></tr>
-          ${hasBulletContent(lastWeekFlat) ? `<tr><th>지난 주 완료 내용</th><td>${renderBulletsView(lastWeekFlat)}</td></tr>` : ''}
-          ${hasBulletContent(resultFlat) ? `<tr><th>지난 주 완료·성과<br>(${item.resultHas==='yes'?'있음':'없음'})</th><td>${renderBulletsView(resultFlat)}</td></tr>` : ''}
-          <tr><th>이번 주 계획</th><td>
+          ${hasBulletContent(lastWeekFlat) ? `<tr><th>지난 주 완료 내용</th><td><div style="break-inside:avoid;page-break-inside:avoid;">${renderBulletsView(lastWeekFlat)}</div></td></tr>` : ''}
+          ${hasBulletContent(resultFlat) ? `<tr><th>지난 주 완료·성과<br>(${item.resultHas==='yes'?'있음':'없음'})</th><td><div style="break-inside:avoid;page-break-inside:avoid;">${renderBulletsView(resultFlat)}</div></td></tr>` : ''}
+          ${item.plans.some(p => hasBulletContent(p.bullets) || (p.deadline && p.deadline.trim())) ? `<tr><th>이번 주 계획</th><td>
             <table class="inner"><thead><tr><th>내용</th><th style="width:80px;">기한</th></tr></thead><tbody>
-            ${item.plans.map(p => `<tr><td style="text-align:left;">${renderBulletsView(p.bullets)}</td><td style="text-align:center;">${escapeHtml(p.deadline)}</td></tr>`).join('')}
+            ${item.plans.filter(p => hasBulletContent(p.bullets) || (p.deadline && p.deadline.trim())).map(p => `<tr style="break-inside:avoid;page-break-inside:avoid;"><td style="text-align:left;"><div style="break-inside:avoid;page-break-inside:avoid;">${renderBulletsView(p.bullets)}</div></td><td style="text-align:center;">${escapeHtml(p.deadline)}</td></tr>`).join('')}
             </tbody></table>
-          </td></tr>`;
+          </td></tr>` : ''}`;
       if (item.coops.length) {
         body += `<tr><th>협조 요청 사항</th><td>
           <table class="inner"><thead><tr><th style="width:100px;">협조 부서</th><th>요청 내용</th><th style="width:70px;">진행상황</th></tr></thead><tbody>
-          ${item.coops.map(c => `<tr><td>${escapeHtml(c.dept)}</td><td style="white-space:pre-wrap;text-align:left;">${escapeHtml(c.content)}</td><td>${escapeHtml(c.status)}</td></tr>`).join('')}
+          ${item.coops.map(c => `<tr style="break-inside:avoid;page-break-inside:avoid;"><td>${escapeHtml(c.dept)}</td><td style="white-space:pre-wrap;text-align:left;"><div style="break-inside:avoid;page-break-inside:avoid;">${escapeHtml(c.content)}</div></td><td>${escapeHtml(c.status)}</td></tr>`).join('')}
           </tbody></table>
         </td></tr>`;
       }
       if (item.decisions.length) {
         body += `<tr><th>관장 확인·결정<br>필요 사항</th><td>
           <table class="inner"><tbody>
-          ${item.decisions.map(d => `<tr><td style="white-space:pre-wrap;text-align:left;">${escapeHtml(d.content)}</td></tr>`).join('')}
+          ${item.decisions.map(d => `<tr style="break-inside:avoid;page-break-inside:avoid;"><td style="white-space:pre-wrap;text-align:left;"><div style="break-inside:avoid;page-break-inside:avoid;">${escapeHtml(d.content)}</div></td></tr>`).join('')}
           </tbody></table>
         </td></tr>`;
       }
-      body += `</table>`;
+      body += `</table></div>`;
     });
     body += `</div>`;
   });
@@ -1864,12 +1901,35 @@ function exportPost() {
     .view-table td { border:1px solid #999; padding:4px 6px; }
     .bullet-view p { margin:2px 0; }
     .item-title { font-weight:700; margin: 12px 0 4px; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    td { break-inside: avoid; page-break-inside: avoid; }
+    td > * { break-inside: avoid; page-break-inside: avoid; }
+    .break-handle { text-align:center; margin:6px 0; cursor:pointer; user-select:none; }
+    .bh-off { display:block; color:#bbb; font-size:0.72rem; border-top:1px dashed #ccc; border-bottom:1px dashed #ccc; padding:4px 0; }
+    .bh-on  { display:none; }
+    .break-handle:hover .bh-off { color:#0060A8; border-color:#0060A8; }
+    .break-handle.active .bh-off { display:none; }
+    .break-handle.active .bh-on  { display:block; color:#003876; font-size:0.78rem; font-weight:bold; background:#ddeeff; border:2px solid #003876; padding:4px 0; border-radius:3px; }
     @media print {
       .toolbar { display:none; }
+      .break-handle { display:none; }
     }
   </style>
+  <script>
+    function toggleBreak(el) {
+      el.classList.toggle('active');
+      const target = document.getElementById(el.getAttribute('data-target'));
+      if (!target) return;
+      const on = el.classList.contains('active');
+      target.style.breakBefore = on ? 'page' : 'auto';
+      target.style.pageBreakBefore = on ? 'always' : 'auto';
+    }
+  <\/script>
   </head><body>
-  <div class="toolbar"><button onclick="window.print()">🖨️ 인쇄 / PDF로 저장</button></div>
+  <div class="toolbar">
+    <button onclick="window.print()">🖨️ 인쇄 / PDF로 저장</button>
+    <p style="color:#888;font-size:0.8rem;margin:8px 0 0;">항목 사이 점선을 클릭하면 그 위치에 페이지 나누기를 설정/해제할 수 있습니다.</p>
+  </div>
   ${body}
   </body></html>`;
 
@@ -1879,8 +1939,89 @@ function exportPost() {
   win.document.close();
 }
 
+// ---------- 피드백 ----------
+let _feedbackRating = 0;
+
+function openFeedbackModal() {
+  _feedbackRating = 0;
+  document.getElementById('feedbackText').value = '';
+  const row = document.getElementById('starRow');
+  row.innerHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'star-btn';
+    btn.textContent = '★';
+    btn.dataset.v = i;
+    btn.onclick = () => { _feedbackRating = i; updateStars(); };
+    btn.onmouseenter = () => highlightStars(i);
+    btn.onmouseleave = () => updateStars();
+    row.appendChild(btn);
+  }
+  document.getElementById('feedbackModal').classList.add('open');
+}
+function closeFeedbackModal() {
+  document.getElementById('feedbackModal').classList.remove('open');
+}
+function updateStars() {
+  document.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', +b.dataset.v <= _feedbackRating));
+}
+function highlightStars(n) {
+  document.querySelectorAll('.star-btn').forEach(b => b.classList.toggle('active', +b.dataset.v <= n));
+}
+async function submitFeedback() {
+  const content = document.getElementById('feedbackText').value.trim();
+  if (!_feedbackRating && !content) { alert('별점 또는 의견을 입력해주세요.'); return; }
+  const btn = document.getElementById('feedbackSubmitBtn');
+  btn.disabled = true; btn.textContent = '제출 중...';
+  try {
+    await db.collection('feedback').add({ rating: _feedbackRating, content, createdAt: new Date().toISOString() });
+    closeFeedbackModal();
+    alert('피드백을 제출했습니다. 감사합니다! 😊');
+  } catch(e) {
+    alert('오류: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '제출';
+  }
+}
+async function loadFeedback() {
+  const container = document.getElementById('feedbackList');
+  if (!container) return;
+  container.innerHTML = '<p class="feedback-empty">불러오는 중...</p>';
+  try {
+    const snap = await db.collection('feedback').orderBy('createdAt', 'desc').get();
+    if (snap.empty) { container.innerHTML = '<p class="feedback-empty">아직 피드백이 없습니다.</p>'; return; }
+    container.innerHTML = snap.docs.map(doc => {
+      const d = doc.data();
+      const stars = d.rating ? '★'.repeat(d.rating) + '☆'.repeat(5 - d.rating) : '';
+      const date = new Date(d.createdAt).toLocaleString('ko-KR');
+      return `<div class="feedback-item">
+        <div class="feedback-meta">${stars ? `<span class="feedback-stars">${stars}</span>` : ''}<span class="feedback-date">${date}</span></div>
+        ${d.content ? `<p class="feedback-content">${escapeHtml(d.content)}</p>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    container.innerHTML = `<p class="feedback-empty">오류: ${e.message}</p>`;
+  }
+}
+
 applyAdminUI();
 document.getElementById('postList').innerHTML = '<li class="empty">불러오는 중...</li>';
 </script>
+
+<!-- 피드백 플로팅 버튼 -->
+<button class="feedback-fab" onclick="openFeedbackModal()"><span class="fab-icon">💬</span> 피드백</button>
+
+<!-- 피드백 모달 -->
+<div class="feedback-modal" id="feedbackModal" onclick="if(event.target===this)closeFeedbackModal()">
+  <div class="feedback-modal-box">
+    <h3>💬 피드백 보내기</h3>
+    <div class="star-row" id="starRow"></div>
+    <textarea id="feedbackText" placeholder="의견을 자유롭게 입력해주세요 (선택)"></textarea>
+    <div class="feedback-modal-actions">
+      <button id="feedbackCancelBtn" onclick="closeFeedbackModal()">취소</button>
+      <button id="feedbackSubmitBtn" onclick="submitFeedback()">제출</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
