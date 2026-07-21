@@ -554,6 +554,16 @@
     flex-shrink: 0;
   }
   .drag-handle:active { cursor: grabbing; }
+  /* ---------- 이전 주 불러오기 ---------- */
+  .prev-load-btn { margin-bottom:10px; }
+  .prev-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center; }
+  .prev-modal.open { display:flex; }
+  .prev-modal-box { background:#fff; border-radius:12px; padding:28px 24px 20px; width:360px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.18); }
+  .prev-modal-box h3 { margin:0 0 16px; color:#003876; font-size:1.05rem; }
+  .prev-modal-box label { display:block; font-size:0.82rem; color:#666; margin:12px 0 4px; }
+  .prev-modal-box select { width:100%; padding:8px; border:1px solid #ccc; border-radius:6px; font-size:0.9rem; }
+  .prev-modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  .prev-modal-actions button { padding:7px 18px; border-radius:6px; border:none; cursor:pointer; font-size:0.9rem; }
   /* ---------- 피드백 ---------- */
   @keyframes fab-pulse { 0%,100%{box-shadow:0 4px 14px rgba(0,96,168,.5),0 0 0 0 rgba(0,96,168,.35)} 60%{box-shadow:0 4px 14px rgba(0,96,168,.5),0 0 0 10px rgba(0,96,168,0)} }
   .feedback-fab { position:fixed; bottom:28px; right:28px; height:46px; padding:0 20px 0 14px; border-radius:23px; background:#0060A8; color:#fff; border:none; font-size:0.95rem; font-weight:700; cursor:pointer; z-index:900; display:flex; align-items:center; gap:7px; animation:fab-pulse 2.4s ease-in-out infinite; transition:background .15s,transform .12s; letter-spacing:.3px; }
@@ -1105,6 +1115,7 @@ function startNewReport() {
 function renderEditForm() {
   const area = document.getElementById('editArea');
   let html = '';
+  html += `<div class="prev-load-btn"><button class="ghost-btn" onclick="openPrevLoadModal()">📥 이전 주 보고 불러오기</button></div>`;
   html += `<label class="field-label">보고자 이름</label>
     <input type="text" class="text-input" id="reporterNameInput" placeholder="예: 김아람" value="${escapeHtml(draft.name)}">`;
 
@@ -1939,6 +1950,52 @@ function exportPost() {
   win.document.close();
 }
 
+// ---------- 이전 주 불러오기 ----------
+function openPrevLoadModal() {
+  const postSel = document.getElementById('prevPostSelect');
+  const repSel  = document.getElementById('prevReporterSelect');
+  const others = data.posts.filter(p => p.id !== currentPostId);
+  postSel.innerHTML = '<option value="">-- 주차를 선택하세요 --</option>' +
+    others.map(p => `<option value="${p.id}">${escapeHtml(p.title || p.id)}</option>`).join('');
+  repSel.innerHTML = '<option value="">-- 주차를 먼저 선택하세요 --</option>';
+  // 이름이 이미 있으면 같은 이름 자동 매칭 시도
+  postSel.onchange = onPrevPostChange;
+  document.getElementById('prevLoadModal').classList.add('open');
+}
+function closePrevModal() {
+  document.getElementById('prevLoadModal').classList.remove('open');
+}
+function onPrevPostChange() {
+  const postId = document.getElementById('prevPostSelect').value;
+  const repSel = document.getElementById('prevReporterSelect');
+  if (!postId) { repSel.innerHTML = '<option value="">-- 주차를 먼저 선택하세요 --</option>'; return; }
+  const post = data.posts.find(p => p.id === postId);
+  if (!post) return;
+  repSel.innerHTML = '<option value="">-- 담당자 선택 --</option>' +
+    post.reporters.map(r => `<option value="${r.id}">${escapeHtml(r.name || '(이름없음)')}</option>`).join('');
+  // 현재 이름과 일치하는 담당자 자동 선택
+  if (draft.name) {
+    const match = post.reporters.find(r => r.name === draft.name);
+    if (match) repSel.value = match.id;
+  }
+}
+function loadPrevReporter() {
+  const postId = document.getElementById('prevPostSelect').value;
+  const repId  = document.getElementById('prevReporterSelect').value;
+  if (!postId || !repId) { alert('주차와 담당자를 모두 선택해주세요.'); return; }
+  const post = data.posts.find(p => p.id === postId);
+  const rep  = post && post.reporters.find(r => r.id === repId);
+  if (!rep) { alert('데이터를 찾을 수 없습니다.'); return; }
+  const currentName = draft.name; // 현재 이름 유지
+  draft = JSON.parse(JSON.stringify(rep)); // 깊은 복사
+  draft.id = uid(); // 새 id 부여
+  draft.name = currentName || rep.name;
+  draft._loadedFrom = null;
+  closePrevModal();
+  renderEditForm();
+  alert(`"${rep.name}"의 이전 보고를 불러왔습니다. 내용을 수정 후 저장하세요.`);
+}
+
 // ---------- 피드백 ----------
 let _feedbackRating = 0;
 
@@ -2007,6 +2064,26 @@ async function loadFeedback() {
 applyAdminUI();
 document.getElementById('postList').innerHTML = '<li class="empty">불러오는 중...</li>';
 </script>
+
+<!-- 이전 주 불러오기 모달 -->
+<div class="prev-modal" id="prevLoadModal" onclick="if(event.target===this)closePrevModal()">
+  <div class="prev-modal-box">
+    <h3>📥 이전 주 보고 불러오기</h3>
+    <label>보고 주차 선택</label>
+    <select id="prevPostSelect" onchange="onPrevPostChange()">
+      <option value="">-- 주차를 선택하세요 --</option>
+    </select>
+    <label>담당자 선택</label>
+    <select id="prevReporterSelect">
+      <option value="">-- 주차를 먼저 선택하세요 --</option>
+    </select>
+    <p style="font-size:0.78rem;color:#e07000;margin:10px 0 0;">※ 불러오면 현재 작성 중인 내용이 덮어씌워집니다.</p>
+    <div class="prev-modal-actions">
+      <button onclick="closePrevModal()" style="background:#eee;color:#555;">취소</button>
+      <button onclick="loadPrevReporter()" style="background:#0060A8;color:#fff;">불러오기</button>
+    </div>
+  </div>
+</div>
 
 <!-- 피드백 플로팅 버튼 -->
 <button class="feedback-fab" onclick="openFeedbackModal()"><span class="fab-icon">💬</span> 피드백</button>
