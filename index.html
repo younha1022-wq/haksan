@@ -452,6 +452,17 @@
     display: flex;
     gap: 6px;
   }
+  .image-edit-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px;
+    background: #f4f7fb;
+    border-radius: 6px;
+  }
+  .img-ctrl { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+  .img-ctrl .small-btn.active { background: #0060A8; color: #fff; }
+  .img-uploading { color: #888; font-style: italic; padding: 12px 0; }
   .bullet-groups {
     display: flex;
     flex-direction: column;
@@ -732,6 +743,42 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const docRef = db.collection('weeklyReports').doc('main');
+
+const CLOUDINARY_CLOUD = 'vlscxeen';
+const CLOUDINARY_PRESET = 'e9hmpneh';
+
+let _imgUploadTarget = null;
+const _imgFileInput = document.createElement('input');
+_imgFileInput.type = 'file';
+_imgFileInput.accept = 'image/*';
+_imgFileInput.style.display = 'none';
+document.body.appendChild(_imgFileInput);
+_imgFileInput.addEventListener('change', async () => {
+  const file = _imgFileInput.files[0];
+  _imgFileInput.value = '';
+  if (!file || !_imgUploadTarget) return;
+  const target = _imgUploadTarget;
+  _imgUploadTarget = null;
+  const placeholder = newImageBullet('', 50);
+  placeholder._loading = true;
+  getBulletArray(target).push(placeholder);
+  renderEditForm();
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', CLOUDINARY_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error?.message || '업로드 실패');
+    placeholder.url = json.secure_url;
+    delete placeholder._loading;
+  } catch(e) {
+    const arr = getBulletArray(target);
+    arr.splice(arr.indexOf(placeholder), 1);
+    alert('이미지 업로드 실패: ' + e.message);
+  }
+  renderEditForm();
+});
 // ===============================================================================
 
 const ADMIN_PASSWORD = 'inu1234';
@@ -974,6 +1021,9 @@ function newTextBullet(level) {
 function newTableBullet() {
   return { type: 'table', colWidths: [120, 120], rows: [[{v:''},{v:''}],[{v:''},{v:''}]] };
 }
+function newImageBullet(url, width) {
+  return { type: 'image', url: url || '', width: width || 50 };
+}
 function normCell(c) {
   if (c === null) return null;
   if (typeof c === 'string') return { v: c };
@@ -1031,6 +1081,7 @@ function procLabel(overviewIdx, procIdx) {
 function hasBulletContent(bullets) {
   return (bullets || []).some(b => {
     if (b.type === 'table') return b.rows.some(row => row.some(c => c && c.v && c.v.trim()));
+    if (b.type === 'image') return !!b.url;
     return b.text && b.text.trim();
   });
 }
@@ -1055,6 +1106,9 @@ function renderBulletsView(bullets) {
     if (b.type === 'table') {
       if (!b.rows.some(row => row.some(c => c && c.v && c.v.trim()))) return;
       out += renderTableHtml(b, 'view-table');
+    } else if (b.type === 'image') {
+      if (!b.url) return;
+      out += `<div style="margin:6px 0;"><img src="${b.url}" style="max-width:${b.width||50}%;height:auto;display:block;"></div>`;
     } else {
       if (!b.text || !b.text.trim()) return;
       const marker = BULLET_MARKERS[b.level || 0] || '○';
@@ -1103,19 +1157,54 @@ function onLoadReporterChange() {
   if (!r) return;
   draft = JSON.parse(JSON.stringify(r));
   draft._loadedFrom = id;
+  draftHistory = [];
   renderEditForm();
 }
 function startNewReport() {
   draft = { id: uid(), name: '', overview: [newOverviewRow()], items: [newItem()] };
+  draftHistory = [];
   renderReporterSelect();
   renderEditForm();
+}
+
+function _getScrollAnchor(el) {
+  if (!el) return null;
+  const d = el.dataset;
+  const itemIdx = d.item !== undefined ? d.item : (d.action === 'del-item' ? d.idx : null);
+  const ovIdx   = d.ov   !== undefined ? d.ov   : (d.action === 'del-overview' ? d.idx : null);
+  if (itemIdx != null) return { type: 'item', idx: itemIdx };
+  if (ovIdx   != null) return { type: 'ov',   idx: ovIdx   };
+  return null;
+}
+function _scrollToAnchor(anchor) {
+  if (!anchor) return;
+  const sel = anchor.type === 'item'
+    ? `#editArea [data-item="${anchor.idx}"]`
+    : `#editArea [data-ov="${anchor.idx}"]`;
+  const el = document.querySelector(sel);
+  if (el) (el.closest('tr') || el.closest('div') || el).scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function pushDraftHistory(anchorEl) {
+  draftHistory.push({ snapshot: JSON.stringify(draft), anchor: _getScrollAnchor(anchorEl || null) });
+  if (draftHistory.length > 20) draftHistory.shift();
+}
+function undoDraft() {
+  if (!draftHistory.length) return;
+  const { snapshot, anchor } = draftHistory.pop();
+  draft = JSON.parse(snapshot);
+  _lastTextSnap = 0;
+  renderEditForm();
+  if (anchor) setTimeout(() => _scrollToAnchor(anchor), 50);
 }
 
 // ---------- 편집 폼 렌더링 ----------
 function renderEditForm() {
   const area = document.getElementById('editArea');
   let html = '';
-  html += `<div class="prev-load-btn"><button class="ghost-btn" onclick="openPrevLoadModal()">📥 이전 주 보고 불러오기</button></div>`;
+  html += `<div class="prev-load-btn" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button class="ghost-btn" onclick="openPrevLoadModal()">📥 이전 주 보고 불러오기</button>
+    <button class="ghost-btn" onclick="undoDraft()" ${draftHistory.length===0?'disabled':''} style="${draftHistory.length===0?'opacity:0.4;cursor:not-allowed;':''}">↩ 되돌리기${draftHistory.length>0?' ('+draftHistory.length+')':''}</button>
+  </div>`;
   html += `<label class="field-label">보고자 이름</label>
     <input type="text" class="text-input" id="reporterNameInput" placeholder="예: 김아람" value="${escapeHtml(draft.name)}">`;
 
@@ -1172,6 +1261,8 @@ let tableSelectState = null;
 let dragSrcIdx = null;
 let isDragging = false;
 let rerenderPending = false;
+let draftHistory = [];
+let _lastTextSnap = 0;
 
 function updateTableSelectUI() {
   document.querySelectorAll('.mini-table td.cell-selected').forEach(td => td.classList.remove('cell-selected'));
@@ -1282,6 +1373,18 @@ function renderBulletEditor(bullets, itemIdx, field, groupAttr) {
         html += '</tr>';
       });
       html += `</tbody></table></div></div>`;
+    } else if (b.type === 'image') {
+      const da = `data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-bidx="${k}"`;
+      html += `<div class="bullet-row image-edit-row">
+        ${b._loading
+          ? `<div class="img-uploading">⏳ 이미지 업로드 중...</div>`
+          : `<img src="${b.url}" class="img-preview" style="max-width:${b.width||50}%;height:auto;border-radius:4px;border:1px solid #ddd;">`
+        }
+        <div class="img-ctrl">
+          ${[25,50,75,100].map(w=>`<button class="small-btn${(b.width||50)===w?' active':''}" data-action="img-width" ${da} data-w="${w}">${w}%</button>`).join('')}
+          <button class="small-btn danger" data-action="del-bullet" data-item="${itemIdx}"${groupAttr} data-bf="${field}" data-idx="${k}">✕ 삭제</button>
+        </div>
+      </div>`;
     } else if (k === 0) {
       const marker = BULLET_MARKERS[0];
       html += `<div class="bullet-row">
@@ -1301,6 +1404,7 @@ function renderBulletEditor(bullets, itemIdx, field, groupAttr) {
   html += `<div class="bullet-editor-actions">
     <button class="small-btn" data-action="add-bullet" data-item="${itemIdx}"${groupAttr} data-bf="${field}">+ 하위 항목(-,·) 추가</button>
     <button class="small-btn" data-action="add-table" data-item="${itemIdx}"${groupAttr} data-bf="${field}">+ 표 추가</button>
+    <button class="small-btn" data-action="add-image" data-item="${itemIdx}"${groupAttr} data-bf="${field}">+ 이미지</button>
   </div></div>`;
   return html;
 }
@@ -1427,6 +1531,8 @@ function renderItemEditor(item, i) {
 document.getElementById('editArea').addEventListener('input', handleEditInput);
 document.getElementById('editArea').addEventListener('change', handleEditInput);
 function handleEditInput(e) {
+  const _now = Date.now();
+  if (_now - _lastTextSnap > 5000) { pushDraftHistory(t); _lastTextSnap = _now; }
   const t = e.target;
   if (t.id === 'reporterNameInput') { draft.name = t.value; return; }
   if (t.dataset.ov !== undefined) {
@@ -1471,6 +1577,7 @@ document.getElementById('editArea').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
   const action = btn.dataset.action;
+  if (action !== 'table-sel-toggle' && action !== 'save-draft') pushDraftHistory(btn);
   if (action === 'add-overview') draft.overview.push(newOverviewRow());
   else if (action === 'del-overview') {
     if (draft.overview.length <= 1) { alert('최소 1개의 업무가 필요합니다.'); return; }
@@ -1496,6 +1603,8 @@ document.getElementById('editArea').addEventListener('click', (e) => {
   }
   else if (action === 'add-bullet') getBulletArray(btn.dataset).push(newTextBullet(1));
   else if (action === 'add-table') getBulletArray(btn.dataset).push(newTableBullet());
+  else if (action === 'add-image') { _imgUploadTarget = {...btn.dataset}; _imgFileInput.click(); return; }
+  else if (action === 'img-width') { getBulletArray(btn.dataset)[+btn.dataset.bidx].width = +btn.dataset.w; }
   else if (action === 'del-bullet') getBulletArray(btn.dataset).splice(+btn.dataset.idx, 1);
   else if (action === 'cycle-level') {
     const b = getBulletArray(btn.dataset)[+btn.dataset.idx];
@@ -1991,6 +2100,7 @@ function loadPrevReporter() {
   draft.id = uid(); // 새 id 부여
   draft.name = currentName || rep.name;
   draft._loadedFrom = null;
+  draftHistory = [];
   closePrevModal();
   renderEditForm();
   alert(`"${rep.name}"의 이전 보고를 불러왔습니다. 내용을 수정 후 저장하세요.`);
