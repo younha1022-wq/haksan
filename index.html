@@ -1043,6 +1043,7 @@ function normalizeBullets(bullets) {
         ? b.colWidths : Array(numCols).fill(120);
       return { type: 'table', colWidths, rows };
     }
+    if (b.type === 'image') return { type: 'image', url: b.url || '', width: b.width || 50 };
     return { type: 'text', level: b.level || 0, text: b.text || '' };
   });
 }
