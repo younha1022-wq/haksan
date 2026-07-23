@@ -1532,9 +1532,9 @@ function renderItemEditor(item, i) {
 document.getElementById('editArea').addEventListener('input', handleEditInput);
 document.getElementById('editArea').addEventListener('change', handleEditInput);
 function handleEditInput(e) {
+  const t = e.target;
   const _now = Date.now();
   if (_now - _lastTextSnap > 5000) { pushDraftHistory(t); _lastTextSnap = _now; }
-  const t = e.target;
   if (t.id === 'reporterNameInput') { draft.name = t.value; return; }
   if (t.dataset.ov !== undefined) {
     const ov = draft.overview[+t.dataset.ov];
